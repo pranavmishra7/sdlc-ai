@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+requests
+
+# LangGraph
+langgraph
+
+# Async
+celery
+redis
+
+# Settings
+pydantic
+pydantic-settings

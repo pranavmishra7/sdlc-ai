@@ -48,7 +48,8 @@ def run_sdlc(self, job_id: str, product_idea: str):
         store.complete(job_id, state.model_dump())
 
     except Exception as e:
-        store.fail(job_id, str(e))
+            store.fail_step(job_id, step, repr(e))
+            raise
 
     try:
         store.set_running(job_id)
@@ -69,4 +70,5 @@ def run_sdlc(self, job_id: str, product_idea: str):
         store.complete(job_id, state.model_dump())
 
     except Exception as e:
-        store.fail(job_id, str(e))
+            store.fail_step(job_id, step, repr(e))
+            raise

@@ -1,28 +1,34 @@
 import requests
 from app.config.settings import settings
-from .base import BaseLLM
 
-class OllamaClient(BaseLLM):
+class OllamaClient:
+    def __init__(self):
+        self.url = f"{settings.OLLAMA_URL}/api/chat"
+        self.model = settings.OLLAMA_MODEL
+
     def generate(self, prompt: str) -> str:
-        response = requests.post(
-            f"{settings.OLLAMA_URL}/api/chat",
-            json={
-                "model": settings.OLLAMA_MODEL,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "stream": False
-            },
-            timeout=120
-        )
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "options": {},      # 🔴 REQUIRED
+            "stream": False
+        }
 
-        response.raise_for_status()
+        response = requests.post(self.url, json=payload, timeout=1200)
+
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Ollama error {response.status_code}: {response.text}"
+            )
+
         data = response.json()
-
-        if "error" in data:
-            raise RuntimeError(f"Ollama error: {data['error']}")
 
         if "message" not in data or "content" not in data["message"]:
             raise RuntimeError(f"Unexpected Ollama response: {data}")
 
-        return data["message"]["content"].strip()
+        return data["message"]["content"]

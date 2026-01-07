@@ -100,3 +100,16 @@ class JobStore:
 
         return None  # all done
 
+    def fail_step(self, job_id: str, step: str, error: str):
+        steps = json.loads(self.client.hget(self._key(job_id), "steps"))
+        steps[step] = "failed"
+
+        self.client.hset(
+            self._key(job_id),
+            mapping={
+                "status": JobStatus.FAILED,
+                "current_step": step,
+                "steps": json.dumps(steps),
+                "error": error,
+            }
+        )

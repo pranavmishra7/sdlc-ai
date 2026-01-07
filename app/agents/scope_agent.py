@@ -37,7 +37,6 @@ Rules:
         job_state.current_step = "scope"
         job_state.progress = 40
         job_state.data["scope"] = output
-
         job_store.save(job_state)
 
     return {

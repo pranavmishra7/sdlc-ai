@@ -15,7 +15,17 @@ class OllamaClient:
                     "content": prompt
                 }
             ],
-            "options": {},      # 🔴 REQUIRED
+            "options": 
+                {
+                    "temperature": 0.2,
+                    "top_p": 0.9,
+                    "num_ctx": 2048,
+                    "num_predict": 350,
+                    "repeat_penalty": 1.1,
+                    "mirostat": 0,
+                    "stop": ["}"]
+                },
+
             "stream": False
         }
 

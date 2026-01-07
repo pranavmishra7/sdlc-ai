@@ -45,7 +45,7 @@ def run_sdlc(self, job_id: str, product_idea: str):
 
             store.complete_step(job_id, step)
 
-        store.complete(job_id, state.model_dump())
+        store.complete(job_id, state.model_dump(mode="json"))
 
     except Exception as e:
             store.fail_step(job_id, step, repr(e))
@@ -67,7 +67,7 @@ def run_sdlc(self, job_id: str, product_idea: str):
 
             store.complete_step(job_id, step)
 
-        store.complete(job_id, state.model_dump())
+        store.complete(job_id, state.model_dump(mode="json"))
 
     except Exception as e:
             store.fail_step(job_id, step, repr(e))

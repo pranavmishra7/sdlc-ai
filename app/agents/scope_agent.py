@@ -32,7 +32,7 @@ Rules:
     # ✅ NEW: persist state if job_id is provided
     if job_id:
         job_store = JobStore()
-        job_state = job_store.get(job_id) or JobState(job_id)
+        job_state = job_store.get(job_id) or JobStatus(job_id)
 
         job_state.current_step = "scope"
         job_state.progress = 40

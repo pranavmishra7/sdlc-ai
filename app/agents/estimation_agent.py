@@ -1,5 +1,5 @@
 from app.llm.router import get_llm
-
+from app.agents.utils import compact
 def run_estimation(requirements: dict, architecture: dict) -> dict:
     llm = get_llm()
 
@@ -13,10 +13,10 @@ def run_estimation(requirements: dict, architecture: dict) -> dict:
     - confidence_level
 
     Requirements:
-    {requirements}
+    {compact(requirements)}
 
     Architecture:
-    {architecture}
+    {compact(architecture)}
     """
 
     output = llm.generate(prompt)

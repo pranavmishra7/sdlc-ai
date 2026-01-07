@@ -1,4 +1,5 @@
 from app.llm.router import get_llm
+from app.agents.utils import compact
 
 def run_sow(
     scope: dict,
@@ -21,16 +22,16 @@ def run_sow(
     - Commercials (no pricing, just structure)
 
     Scope:
-    {scope}
+    {compact(scope)}
 
     Requirements:
-    {requirements}
+    {compact(requirements)}
 
     Estimation:
-    {estimation}
+    {compact(estimation)}
 
     Risks:
-    {risks}
+    {compact(risks)}
     """
 
     return llm.generate(prompt)

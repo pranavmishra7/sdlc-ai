@@ -1,4 +1,5 @@
 from app.llm.router import get_llm
+from app.agents.utils import compact
 
 def run_intake(product_idea: str) -> dict:
     if not product_idea or not product_idea.strip():
@@ -14,7 +15,7 @@ def run_intake(product_idea: str) -> dict:
     - assumptions
 
     Product Idea:
-    {product_idea}
+    {compact(product_idea)}
     """
 
     response = llm.generate(prompt)

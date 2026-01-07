@@ -1,4 +1,5 @@
 from app.llm.router import get_llm
+from app.agents.utils import compact
 
 def run_requirements(scope: dict) -> dict:
     llm = get_llm()
@@ -13,7 +14,7 @@ def run_requirements(scope: dict) -> dict:
     - assumptions
 
     Scope:
-    {scope}
+    {compact(scope)}
     """
 
     output = llm.generate(prompt)

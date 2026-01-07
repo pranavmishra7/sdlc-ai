@@ -1,5 +1,5 @@
 from app.llm.router import get_llm
-
+from app.agents.utils import compact
 def run_architecture(requirements: dict) -> dict:
     llm = get_llm()
 
@@ -14,7 +14,7 @@ def run_architecture(requirements: dict) -> dict:
     - key_design_decisions
 
     Requirements:
-    {requirements}
+    {compact(requirements)}
     """
 
     output = llm.generate(prompt)

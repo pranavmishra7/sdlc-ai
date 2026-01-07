@@ -33,6 +33,14 @@
     .completed { background: #d4edda; }
     .failed { background: #f8d7da; }
 
+    .summary {
+      margin-top: 12px;
+      padding: 10px;
+      font-weight: bold;
+      background: #e3f2fd;
+      border-radius: 4px;
+    }
+
     pre {
       background: #111;
       color: #0f0;
@@ -57,6 +65,8 @@
 <h3>Steps</h3>
 <div id="steps"></div>
 
+<div id="workflowSummary" class="summary" style="display:none;"></div>
+
 <h3>Result</h3>
 <pre id="result"></pre>
 
@@ -64,10 +74,12 @@
 let jobId = null;
 let poller = null;
 
-// ⏱️ Track timing per step
+// ⏱ Per-step timing store
 const stepTimings = {};
+let workflowStartedAt = null;
+let workflowEndedAt = null;
 
-/* ---------------- UTIL ---------------- */
+/* ---------------- UTILITIES ---------------- */
 
 function formatTime(date) {
   return date.toLocaleString("en-GB", {
@@ -80,17 +92,28 @@ function formatTime(date) {
   });
 }
 
+function formatDuration(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
 /* ---------------- START JOB ---------------- */
 
 function startJob() {
   const idea = document.getElementById("idea").value;
 
   jobId = null;
+  workflowStartedAt = null;
+  workflowEndedAt = null;
+
   for (const k in stepTimings) delete stepTimings[k];
 
   document.getElementById("status").innerText = "";
   document.getElementById("steps").innerHTML = "";
   document.getElementById("result").innerText = "";
+  document.getElementById("workflowSummary").style.display = "none";
 
   fetch(`/v1/start?product_idea=${encodeURIComponent(idea)}`, {
     method: "POST"
@@ -120,15 +143,23 @@ function fetchStatus() {
       document.getElementById("status").innerText =
         `Status: ${data.status} | Current step: ${data.current_step}`;
 
-      renderSteps(data.steps);
-
-      if (data.status === "completed") {
-        clearInterval(poller);
-        fetchResult();
+      if (data.status === "running" && !workflowStartedAt) {
+        workflowStartedAt = new Date();
       }
 
-      if (data.status === "failed") {
+      renderSteps(data.steps);
+
+      if (
+        (data.status === "completed" || data.status === "failed") &&
+        !workflowEndedAt
+      ) {
+        workflowEndedAt = new Date();
+        renderWorkflowSummary();
         clearInterval(poller);
+
+        if (data.status === "completed") {
+          fetchResult();
+        }
       }
     });
 }
@@ -142,23 +173,19 @@ function renderSteps(steps) {
   const now = new Date();
 
   for (const [step, state] of Object.entries(steps)) {
-    // initialize timing record
     if (!stepTimings[step]) {
       stepTimings[step] = {
         startedAt: null,
-        endedAt: null,
-        lastState: null
+        endedAt: null
       };
     }
 
     const timing = stepTimings[step];
 
-    // detect transition to running
     if (state === "running" && !timing.startedAt) {
       timing.startedAt = now;
     }
 
-    // detect terminal transition
     if (
       (state === "completed" || state === "failed") &&
       timing.startedAt &&
@@ -166,8 +193,6 @@ function renderSteps(steps) {
     ) {
       timing.endedAt = now;
     }
-
-    timing.lastState = state;
 
     const div = document.createElement("div");
     div.className = `step ${state}`;
@@ -179,12 +204,29 @@ function renderSteps(steps) {
     }
 
     if (timing.endedAt) {
-      text += ` → ${state} at ${formatTime(timing.endedAt)}`;
+      const duration = formatDuration(
+        timing.endedAt - timing.startedAt
+      );
+      text += ` → ${state} at ${formatTime(timing.endedAt)} (${duration})`;
     }
 
     div.innerText = text;
     stepsDiv.appendChild(div);
   }
+}
+
+/* ---------------- WORKFLOW SUMMARY ---------------- */
+
+function renderWorkflowSummary() {
+  if (!workflowStartedAt || !workflowEndedAt) return;
+
+  const summaryDiv = document.getElementById("workflowSummary");
+  const totalDuration = formatDuration(
+    workflowEndedAt - workflowStartedAt
+  );
+
+  summaryDiv.innerText = `Total workflow time: ${totalDuration}`;
+  summaryDiv.style.display = "block";
 }
 
 /* ---------------- RESULT ---------------- */

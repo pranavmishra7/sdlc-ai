@@ -3,6 +3,8 @@ from app.workflows.sdlc_graph import build_graph
 from app.state.sdlc_state import SDLCState
 from app.storage.job_store import JobStore
 from app.state.job_state import JobStatus
+from pydantic import BaseModel
+from typing import Any
 
 store = JobStore()
 graph = build_graph()
@@ -19,14 +21,19 @@ STEPS = [
 
 
 # ✅ SAFE serializer (CRITICAL FIX)
-def safe_state_dump(state: SDLCState) -> dict:
+def safe_state_dump(state: Any) -> dict:
     """
-    Convert SDLCState to plain dict without calling model_dump()
-    on nested dicts or strings.
+    Safely serialize LangGraph state which may be:
+    - SDLCState (Pydantic)
+    - dict (from dict-returning nodes like SOW)
     """
-    return {
-        k: v for k, v in state.__dict__.items()
-    }
+    if isinstance(state, dict):
+        return state
+
+    if isinstance(state, BaseModel):
+        return dict(state.__dict__)
+
+    raise TypeError(f"Unsupported state type: {type(state)}")
 
 
 @celery_app.task(bind=True)

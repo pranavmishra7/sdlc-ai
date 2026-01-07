@@ -7,33 +7,37 @@ AI-powered SDLC automation platform using:
 - Redis
 - Ollama
 
+---
+
 ## Prerequisites
 
-- Python 3.10+
+- Ubuntu / WSL2
+- Python **3.10+** (mandatory)
 - Redis
 - Ollama
+- Enterprise laptops: browser access to `localhost` may be restricted
 
-## Setup
+---
+
+## Important Notes (Read This First)
+
+- Python **3.8 / 3.9 will NOT work** (LangGraph + modern typing requires 3.10+)
+- Browser access to `http://localhost` may be **blocked by enterprise security**
+- **curl is the source of truth** for API validation
+- Swagger UI (`/docs`) is optional, not required
+
+---
+
+## Python Version Setup (Required)
+
+### Install Python 3.10 using pyenv (Ubuntu / WSL)
+
+System Python on Ubuntu 20.04 is too old. Use `pyenv`.
 
 ```bash
-git clone <your-repo-url>
-cd sdlc-ai
-
-python3 -m venv .venv
-source .venv/bin/activate
-
-pip install --upgrade pip
-pip install -r requirements.txt
-
-redis-server
-ollama serve
-ollama pull llama3:8b
-celery -A app.workers.celery_worker.celery_app worker --loglevel=info
-uvicorn app.main:app --reload
-POST /v1/start
-
-GET /v1/status/{job_id}
-
-GET /v1/result/{job_id}
-
-POST /v1/resume/{job_id}
+sudo apt update
+sudo apt install -y \
+  build-essential libssl-dev zlib1g-dev libbz2-dev \
+  libreadline-dev libsqlite3-dev libffi-dev \
+  libncurses5-dev libncursesw5-dev liblzma-dev \
+  xz-utils tk-dev ca-certificates curl

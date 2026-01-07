@@ -1,14 +1,18 @@
-fastapi
-uvicorn
-requests
+# Web framework
+fastapi>=0.110
+uvicorn>=0.27
 
-# LangGraph
+# HTTP client
+requests>=2.31
+
+# LangGraph / LangChain core
 langgraph
+langchain-core
 
-# Async
-celery
-redis
+# Async / background processing
+celery>=5.3
+redis>=5.0
 
-# Settings
-pydantic
-pydantic-settings
+# Configuration / settings
+pydantic>=2.5
+pydantic-settings>=2.1

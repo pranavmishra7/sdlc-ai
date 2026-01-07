@@ -8,7 +8,7 @@ def sow_node(state: SDLCState):
         estimation=state.estimation,
         risks=state.risk,
     )
-
+    print("SOW TYPE:", type(sow_output))
     state.sow = sow_output
     return state
 

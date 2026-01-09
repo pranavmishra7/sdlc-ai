@@ -19,19 +19,28 @@
     }
 
     button {
-      padding: 8px 14px;
-      margin-top: 10px;
+      padding: 6px 12px;
       cursor: pointer;
+      margin-left: 6px;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .step {
-      padding: 8px;
-      margin: 6px 0;
+      padding: 10px;
+      margin: 8px 0;
       border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .step-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 14px;
+      cursor: pointer;
     }
 
     .pending { background: #eee; }
@@ -39,17 +48,24 @@
     .completed { background: #d4edda; }
     .failed { background: #f8d7da; }
 
-    .time {
+    .meta {
       font-size: 12px;
       opacity: 0.8;
+    }
+
+    .error {
+      color: #b00020;
+      font-weight: bold;
     }
 
     pre {
       background: #111;
       color: #0f0;
-      padding: 12px;
+      padding: 10px;
+      margin-top: 8px;
+      display: none;
+      font-size: 12px;
       overflow-x: auto;
-      font-size: 13px;
     }
 
     h3 {
@@ -73,17 +89,13 @@
 <h3>Workflow Progress</h3>
 <div id="steps"></div>
 
-<h3>Actions</h3>
-<button onclick="resumeJob()">Resume Job</button>
-
-<h3>Result</h3>
-<pre id="result"></pre>
-
 <script>
 let jobId = null;
 let poller = null;
+let evtSource = null;
 
-/* 🔹 User-friendly labels */
+const API = "/api/workflows";
+
 const STEP_LABELS = {
   intake: "Problem Statement",
   scope: "Scope Definition",
@@ -97,8 +109,10 @@ const STEP_LABELS = {
 function startJob() {
   const idea = document.getElementById("idea").value;
 
-  fetch(`/v1/start?product_idea=${encodeURIComponent(idea)}`, {
-    method: "POST"
+  fetch(`${API}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ product_idea: idea })
   })
     .then(r => r.json())
     .then(data => {
@@ -106,67 +120,116 @@ function startJob() {
       document.getElementById("status").innerText =
         `Job started (ID: ${jobId})`;
       startPolling();
+      attachSSE();
     });
 }
 
 function startPolling() {
   if (poller) clearInterval(poller);
-  poller = setInterval(fetchStatus, 2000);
+  poller = setInterval(fetchStatus, 3000);
 }
 
 function fetchStatus() {
   if (!jobId) return;
 
-  fetch(`/v1/status/${jobId}`)
+  fetch(`${API}/${jobId}/status`)
+    .then(r => r.json())
+    .then(renderStatus);
+}
+
+function renderStatus(data) {
+  const stepsDiv = document.getElementById("steps");
+  stepsDiv.innerHTML = "";
+
+  if (data.dead_letter) {
+    document.getElementById("status").innerHTML =
+      `<span class="error">❌ Job dead-lettered at ${STEP_LABELS[data.dead_letter.step]}</span>`;
+    clearInterval(poller);
+  } else {
+    document.getElementById("status").innerText =
+      `Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}`;
+  }
+
+  for (const [step, state] of Object.entries(data.steps)) {
+    const retries = data.retries?.[step] ?? 0;
+    const maxRetries = data.retry_policy?.[step] ?? "—";
+    const error = data.errors?.[step];
+
+    const div = document.createElement("div");
+    div.className = `step ${state}`;
+
+    const header = document.createElement("div");
+    header.className = "step-header";
+    header.innerHTML = `
+      <strong>${STEP_LABELS[step]}</strong>
+      <span class="meta">
+        ${state}
+        | retries: ${retries}/${maxRetries}
+        ${state === "failed" ? `<button onclick="retryJob()">Retry</button>` : ""}
+      </span>
+    `;
+
+    const pre = document.createElement("pre");
+    pre.id = `output-${step}`;
+
+    header.onclick = () => {
+      pre.style.display = pre.style.display === "none" ? "block" : "none";
+    };
+
+    div.appendChild(header);
+    div.appendChild(pre);
+    stepsDiv.appendChild(div);
+
+    if (state === "completed") {
+      fetchStepResult(step);
+    }
+
+    if (state === "failed" && error) {
+      pre.style.display = "block";
+      pre.textContent = JSON.stringify(error, null, 2);
+    }
+  }
+}
+
+function fetchStepResult(step) {
+  fetch(`${API}/${jobId}/steps/${step}`)
     .then(r => r.json())
     .then(data => {
-      document.getElementById("status").innerText =
-        `Status: ${data.status} | Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}`;
-
-      const stepsDiv = document.getElementById("steps");
-      stepsDiv.innerHTML = "";
-
-      for (const [step, state] of Object.entries(data.steps)) {
-        const div = document.createElement("div");
-        div.className = `step ${state}`;
-
-        const label = STEP_LABELS[step] ?? step;
-
-        div.innerHTML = `
-          <strong>${label}</strong>
-          <span class="time">${state}</span>
-        `;
-
-        stepsDiv.appendChild(div);
-      }
-
-      if (data.status === "completed") {
-        clearInterval(poller);
-        fetchResult();
-      }
-
-      if (data.status === "failed") {
-        clearInterval(poller);
-        document.getElementById("status").innerText =
-          `❌ Failed at ${STEP_LABELS[data.current_step]}`;
+      const pre = document.getElementById(`output-${step}`);
+      if (pre) {
+        pre.textContent = JSON.stringify(data, null, 2);
       }
     });
 }
 
-function fetchResult() {
-  fetch(`/v1/result/${jobId}`)
-    .then(r => r.json())
-    .then(data => {
-      document.getElementById("result").innerText =
-        JSON.stringify(data, null, 2);
-    });
+function attachSSE() {
+  if (evtSource) evtSource.close();
+
+  evtSource = new EventSource(`${API}/events/${jobId}`);
+
+  evtSource.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    if (
+      msg.event === "step_completed" ||
+      msg.event === "step_failed" ||
+      msg.event === "step_auto_retry" ||
+      msg.event === "job_dead_lettered"
+    ) {
+      fetchStatus();
+    }
+  };
 }
 
-function resumeJob() {
+function retryJob() {
   if (!jobId) return;
 
-  fetch(`/v1/resume/${jobId}`, { method: "POST" })
-    .then(() => startPolling());
+  fetch(`${API}/${jobId}/retry`, { method: "POST" })
+    .then(() => {
+      document.getElementById("status").innerText =
+        "Retry triggered…";
+      startPolling();
+    });
 }
 </script>
 

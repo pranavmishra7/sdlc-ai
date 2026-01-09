@@ -122,3 +122,11 @@ async def stream_events(job_id: str, request: Request):
             sse_manager.unregister(job_id, queue)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
+
+    @router.get("/{job_id}/status")
+    def get_job_status(job_id: str):
+        store = JobStore(job_id)
+        status = store.load_status()
+        if status is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return status

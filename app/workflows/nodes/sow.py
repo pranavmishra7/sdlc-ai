@@ -5,13 +5,27 @@ from app.storage.job_store import JobStore
 from app.services.sse_manager import sse_manager
 
 
+def _safe_emit(job_id: str, payload: dict):
+    """
+    Safely emit SSE event from sync context (Celery-safe).
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(sse_manager.publish(job_id, payload))
+    except RuntimeError:
+        # No running event loop (Celery worker)
+        pass
+
+
 def sow_node(state: SDLCState) -> SDLCState:
     job_store = JobStore(state.job_id)
 
     try:
+        # Mark running
         state.mark_step_running("sow")
         job_store.save_status(state.to_dict())
 
+        # Execute agent
         result = run_sow({
             "intake": state.intake,
             "scope": state.scope,
@@ -21,39 +35,44 @@ def sow_node(state: SDLCState) -> SDLCState:
             "risk": state.risk,
         })
 
+        # Persist step output
         job_store.save_step("sow", result)
 
+        # Update state
         state.sow = result
         state.mark_step_completed("sow")
-        state.set_current_step("completed")
+        state.current_step = "completed"   # ✅ FIX
         job_store.save_status(state.to_dict())
 
-        asyncio.create_task(
-            sse_manager.publish(
-                state.job_id,
-                {
-                    "event": "step_completed",
-                    "step": "sow",
-                    "data": result,
-                },
-            )
+        # Emit success SSE event
+        _safe_emit(
+            state.job_id,
+            {
+                "event": "step_completed",
+                "step": "sow",
+                "data": result,
+            },
         )
 
         return state
 
     except Exception as exc:
-        state.mark_step_failed("sow", exc, retryable=False)
+        # Mark failure (no auto-retry for SOW)
+        state.mark_step_failed(
+            step="sow",
+            error=exc,
+            retryable=False,
+        )
         job_store.save_status(state.to_dict())
 
-        asyncio.create_task(
-            sse_manager.publish(
-                state.job_id,
-                {
-                    "event": "step_failed",
-                    "step": "sow",
-                    "error": state.errors.get("sow"),
-                },
-            )
+        # Emit failure SSE event
+        _safe_emit(
+            state.job_id,
+            {
+                "event": "step_failed",
+                "step": "sow",
+                "error": state.errors.get("sow"),
+            },
         )
 
         return state

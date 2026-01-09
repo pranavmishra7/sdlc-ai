@@ -69,14 +69,33 @@ class SDLCState:
         self.errors.pop(step, None)
         self.retries[step] = 0
 
-    def mark_step_failed(self, step: str, error: Exception, retryable: bool = True):
-        self.steps[step] = "failed"
-        self.errors[step] = {
-            "type": type(error).__name__,
-            "message": str(error),
+    def mark_step_failed(
+        self,
+        step: Optional[str] = None,
+        error: Optional[Exception] = None,
+        retryable: bool = True,
+        **kwargs,
+    ):
+        """
+        Mark a step as failed.
+
+        Supports both:
+        - mark_step_failed("intake", exc)
+        - mark_step_failed(step_name="intake", error=exc)
+        """
+
+        step_name = step or kwargs.get("step_name")
+
+        if not step_name:
+            raise ValueError("step or step_name must be provided")
+
+        self.steps[step_name] = "failed"
+        self.errors[step_name] = {
+            "type": type(error).__name__ if error else "UnknownError",
+            "message": str(error) if error else "",
             "retryable": retryable,
         }
-        self.current_step = step
+        self.current_step = step_name
 
     # -------------------------
     # Retry logic

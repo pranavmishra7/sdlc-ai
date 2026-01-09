@@ -5,6 +5,18 @@ from app.storage.job_store import JobStore
 from app.services.sse_manager import sse_manager
 
 
+def _safe_emit(job_id: str, payload: dict):
+    """
+    Safely emit SSE event from sync context (Celery-safe).
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(sse_manager.publish(job_id, payload))
+    except RuntimeError:
+        # No running loop → ignore SSE instead of crashing worker
+        pass
+
+
 def intake_node(state: SDLCState) -> SDLCState:
     """
     Intake workflow node (failure-aware)
@@ -30,19 +42,17 @@ def intake_node(state: SDLCState) -> SDLCState:
         # Update state
         state.intake = result
         state.mark_step_completed("intake")
-        state.set_current_step("scope")
+        state.current_step = "scope"   # ✅ FIX
         job_store.save_status(state.to_dict())
 
         # Emit success SSE event
-        asyncio.create_task(
-            sse_manager.publish(
-                state.job_id,
-                {
-                    "event": "step_completed",
-                    "step": "intake",
-                    "data": result,
-                },
-            )
+        _safe_emit(
+            state.job_id,
+            {
+                "event": "step_completed",
+                "step": "intake",
+                "data": result,
+            },
         )
 
         return state
@@ -57,15 +67,13 @@ def intake_node(state: SDLCState) -> SDLCState:
         job_store.save_status(state.to_dict())
 
         # Emit failure SSE event
-        asyncio.create_task(
-            sse_manager.publish(
-                state.job_id,
-                {
-                    "event": "step_failed",
-                    "step": "intake",
-                    "error": state.errors.get("intake"),
-                },
-            )
+        _safe_emit(
+            state.job_id,
+            {
+                "event": "step_failed",
+                "step": "intake",
+                "error": state.errors.get("intake"),
+            },
         )
 
         # Stop workflow progression

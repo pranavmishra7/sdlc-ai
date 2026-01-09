@@ -62,9 +62,9 @@ def get_llm() -> Any:
     provider = settings.LLM_PROVIDER.lower()
 
     if provider == "ollama":
+        # ✅ DO NOT pass base_url (your client does not support it)
         client = OllamaClient(
-            base_url=settings.OLLAMA_BASE_URL,
-            model=settings.OLLAMA_MODEL,
+            model=settings.OLLAMA_MODEL
         )
         return LLMWrapper(client, ollama_breaker)
 

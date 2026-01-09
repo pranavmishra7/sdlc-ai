@@ -1,44 +1,55 @@
+from datetime import datetime
+from typing import Dict, Any
+
 from app.llm.router import get_llm
-from app.state.job_state import JobStatus
-from app.storage.job_store import JobStore
+from app.agents.utils import compact
 
 
-def run_scope(intake: dict, job_id: str | None = None) -> dict:
+def run_scope(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    SDLC Scope Agent
+    - Pure reasoning
+    - No side effects
+    """
+
+    started_at = datetime.utcnow().isoformat()
     llm = get_llm()
 
+    intake_output = input_data.get("intake", {})
+
     prompt = f"""
-You are an SDLC scope generator.
+    You are an SDLC scope definition agent.
 
-Input:
-{intake}
+    Based on the intake below, define project scope.
 
-Output STRICT JSON:
-{{
-  "in_scope": [string],
-  "out_of_scope": [string],
-  "assumptions": [string],
-  "dependencies": [string],
-  "constraints": [string]
-}}
+    Intake:
+    {compact(intake_output)}
 
-Rules:
-- No explanations
-- Max 10 items per array
-- Short bullet phrases only
-"""
+    Return STRICT JSON with:
+    - in_scope
+    - out_of_scope
+    - assumptions
+    """
 
-    output = llm.generate(prompt)
+    response = llm.generate(prompt)
 
-    # ✅ NEW: persist state if job_id is provided
-    if job_id:
-        job_store = JobStore()
-        job_state = job_store.get(job_id) or JobStatus(job_id)
+    if response is None:
+        raise RuntimeError("LLM returned None")
 
-        job_state.current_step = "scope"
-        job_state.progress = 40
-        job_state.data["scope"] = output
-        job_store.save(job_state)
+    if not isinstance(response, str):
+        raise TypeError(f"LLM returned non-string response: {type(response)}")
+
+    if not response.strip():
+        raise RuntimeError("LLM returned empty response")
+
+    output = {
+        "raw_output": response
+    }
 
     return {
-        "raw_output": output
+        "step": "scope",
+        "status": "completed",
+        "started_at": started_at,
+        "completed_at": datetime.now().isoformat(),
+        "output": output
     }

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SDLC Admin Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f8f9fb;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      margin-top: 10px;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f0f0f0;
+    }
+
+    .error {
+      color: #b00020;
+      font-weight: bold;
+    }
+
+    .ok {
+      color: #0a7d2f;
+      font-weight: bold;
+    }
+
+    pre {
+      background: #111;
+      color: #0f0;
+      padding: 10px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🛠 SDLC Admin Console</h1>
+
+<button onclick="loadDeadLetterJobs()">🔄 Refresh Dead-letter Jobs</button>
+
+<table id="jobsTable">
+  <thead>
+    <tr>
+      <th>Job ID</th>
+      <th>Failed Step</th>
+      <th>Error</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h2>📄 Job Details</h2>
+<pre id="jobDetails">Select a job to inspect details...</pre>
+
+<script>
+  const API_BASE = "/workflows";
+
+  async function loadDeadLetterJobs() {
+    const res = await fetch(`${API_BASE}/admin/dead-letter`);
+    const jobs = await res.json();
+
+    const tbody = document.querySelector("#jobsTable tbody");
+    tbody.innerHTML = "";
+
+    if (jobs.length === 0) {
+      tbody.innerHTML = "<tr><td colspan='4' class='ok'>No dead-letter jobs 🎉</td></tr>";
+      return;
+    }
+
+    for (const job of jobs) {
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${job.job_id}</td>
+        <td class="error">${job.dead_letter.step}</td>
+        <td>${job.dead_letter.error?.message || "Unknown error"}</td>
+        <td>
+          <button onclick="inspectJob('${job.job_id}')">Inspect</button>
+          <button onclick="resetJob('${job.job_id}')">Reset & Retry</button>
+          <button onclick="listenEvents('${job.job_id}')">Live Events</button>
+        </td>
+      `;
+
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function inspectJob(jobId) {
+    const res = await fetch(`${API_BASE}/admin/jobs/${jobId}`);
+    const data = await res.json();
+    document.getElementById("jobDetails").textContent =
+      JSON.stringify(data, null, 2);
+  }
+
+  async function resetJob(jobId) {
+    if (!confirm("Reset and retry this job?")) return;
+
+    const res = await fetch(`${API_BASE}/admin/jobs/${jobId}/reset`, {
+      method: "POST",
+    });
+
+    const data = await res.json();
+    alert(data.message);
+    loadDeadLetterJobs();
+  }
+
+  function listenEvents(jobId) {
+    const evtSource = new EventSource(`${API_BASE}/events/${jobId}`);
+
+    evtSource.onmessage = (event) => {
+      const payload = JSON.parse(event.data);
+      document.getElementById("jobDetails").textContent =
+        JSON.stringify(payload, null, 2);
+    };
+
+    evtSource.onerror = () => {
+      evtSource.close();
+    };
+  }
+
+  // Initial load
+  loadDeadLetterJobs();
+</script>
+
+</body>
+</html>

@@ -1,27 +1,72 @@
+from datetime import datetime
+from typing import Dict, Any
+
 from app.llm.router import get_llm
 from app.agents.utils import compact
 
-def run_risk(requirements: dict, architecture: dict) -> dict:
+
+def run_risk(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    SDLC Risk Agent
+    - Pure reasoning
+    - No side effects
+    """
+
+    started_at = datetime.utcnow().isoformat()
     llm = get_llm()
 
-    prompt = f"""
-    Identify risks based on requirements and architecture.
+    intake = input_data.get("intake", {})
+    scope = input_data.get("scope", {})
+    requirements = input_data.get("requirements", {})
+    architecture = input_data.get("architecture", {})
+    estimation = input_data.get("estimation", {})
 
-    Return JSON with:
-    - technical_risks
-    - delivery_risks
-    - business_risks
-    - mitigations
+    prompt = f"""
+    You are an SDLC risk analysis agent.
+
+    Based on the inputs below, identify project risks.
+
+    Intake:
+    {compact(intake)}
+
+    Scope:
+    {compact(scope)}
 
     Requirements:
     {compact(requirements)}
 
     Architecture:
     {compact(architecture)}
+
+    Estimation:
+    {compact(estimation)}
+
+    Return STRICT JSON with:
+    - technical_risks
+    - delivery_risks
+    - operational_risks
+    - mitigation_strategies
     """
 
-    output = llm.generate(prompt)
+    response = llm.generate(prompt)
+
+    if response is None:
+        raise RuntimeError("LLM returned None")
+
+    if not isinstance(response, str):
+        raise TypeError(f"LLM returned non-string response: {type(response)}")
+
+    if not response.strip():
+        raise RuntimeError("LLM returned empty response")
+
+    output = {
+        "raw_output": response
+    }
 
     return {
-        "raw_output": output
+        "step": "risk",
+        "status": "completed",
+        "started_at": started_at,
+        "completed_at": datetime.utcnow().isoformat(),
+        "output": output
     }

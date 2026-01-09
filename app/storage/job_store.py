@@ -1,115 +1,69 @@
 import json
-import redis
-from app.config.settings import settings
-from app.state.job_state import JobStatus
+from pathlib import Path
+from typing import Any, Dict, Optional, List
 
-STEPS = [
-    "intake",
-    "scope",
-    "requirements",
-    "architecture",
-    "estimation",
-    "risk",
-    "sow",
-]
 
 class JobStore:
-    def __init__(self):
-        self.client = redis.Redis.from_url(
-            settings.REDIS_URL,
-            decode_responses=True
-        )
+    """
+    File-based job storage.
+    """
 
-    def _key(self, job_id: str) -> str:
-        return f"sdlc:job:{job_id}"
+    BASE_DIR = Path("jobs")
 
-    def create(self, job_id: str):
-        data = {
-            "status": JobStatus.PENDING,
-            "current_step": "",
-            "steps": json.dumps({step: "pending" for step in STEPS}),
-            "result": "",
-            "error": "",
-        }
-        self.client.hset(self._key(job_id), mapping=data)
+    def __init__(self, job_id: str):
+        self.job_id = job_id
+        self.job_dir = self.BASE_DIR / job_id
+        self.job_dir.mkdir(parents=True, exist_ok=True)
 
-    def set_running(self, job_id: str):
-        self.client.hset(self._key(job_id), "status", JobStatus.RUNNING)
+    # -------------------------
+    # Write
+    # -------------------------
 
-    def start_step(self, job_id: str, step: str):
-        steps = json.loads(self.client.hget(self._key(job_id), "steps"))
-        steps[step] = "running"
+    def save_step(self, step_name: str, data: Dict[str, Any]) -> None:
+        path = self.job_dir / f"{step_name}.json"
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
 
-        self.client.hset(
-            self._key(job_id),
-            mapping={
-                "current_step": step,
-                "steps": json.dumps(steps),
-            }
-        )
+    def save_status(self, status: Dict[str, Any]) -> None:
+        path = self.job_dir / "status.json"
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(status, f, indent=2)
 
-    def complete_step(self, job_id: str, step: str):
-        steps = json.loads(self.client.hget(self._key(job_id), "steps"))
-        steps[step] = "completed"
+    # -------------------------
+    # Read
+    # -------------------------
 
-        self.client.hset(
-            self._key(job_id),
-            "steps",
-            json.dumps(steps)
-        )
-
-    def complete(self, job_id: str, result: dict):
-        self.client.hset(
-            self._key(job_id),
-            mapping={
-                "status": JobStatus.COMPLETED,
-                "result": json.dumps(result),
-            }
-        )
-
-    def fail(self, job_id: str, error: str):
-        self.client.hset(
-            self._key(job_id),
-            mapping={
-                "status": JobStatus.FAILED,
-                "error": error,
-            }
-        )
-
-    def get(self, job_id: str) -> dict | None:
-        data = self.client.hgetall(self._key(job_id))
-        if not data:
+    def load_step(self, step_name: str) -> Optional[Dict[str, Any]]:
+        path = self.job_dir / f"{step_name}.json"
+        if not path.exists():
             return None
+        return json.loads(path.read_text())
 
-        return {
-            "status": data["status"],
-            "current_step": data["current_step"] or None,
-            "steps": json.loads(data["steps"]),
-            "result": json.loads(data["result"]) if data["result"] else None,
-            "error": data["error"] or None,
-        }
-        
-    def get_next_step(self, job_id: str) -> str | None:
-        job = self.get(job_id)
-        if not job:
+    def load_status(self) -> Optional[Dict[str, Any]]:
+        path = self.job_dir / "status.json"
+        if not path.exists():
             return None
+        return json.loads(path.read_text())
 
-        for step, status in job["steps"].items():
-            if status != "completed":
-                return step
+    # -------------------------
+    # Admin helpers
+    # -------------------------
 
-        return None  # all done
+    @classmethod
+    def list_jobs(cls) -> List[str]:
+        if not cls.BASE_DIR.exists():
+            return []
+        return [p.name for p in cls.BASE_DIR.iterdir() if p.is_dir()]
 
-    def fail_step(self, job_id: str, step: str, error: str):
-        steps = json.loads(self.client.hget(self._key(job_id), "steps"))
-        steps[step] = "failed"
-
-        self.client.hset(
-            self._key(job_id),
-            mapping={
-                "status": JobStatus.FAILED,
-                "current_step": step,
-                "steps": json.dumps(steps),
-                "error": error,
-            }
-        )
+    @classmethod
+    def list_dead_letter_jobs(cls) -> List[Dict[str, Any]]:
+        jobs = []
+        for job_id in cls.list_jobs():
+            store = cls(job_id)
+            status = store.load_status()
+            if status and status.get("dead_letter"):
+                jobs.append({
+                    "job_id": job_id,
+                    "dead_letter": status["dead_letter"],
+                })
+        return jobs

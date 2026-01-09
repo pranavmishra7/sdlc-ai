@@ -1,25 +1,41 @@
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
-from app.api.v1 import workflows, health
 
-BASE_DIR = Path(__file__).resolve().parent  # app/
+from app.api.v1.workflows import router as workflows_router
+from app.api.v1.health import router as health_router
 
-app = FastAPI(title="SDLC AI")
 
-# API
-app.include_router(health.router, prefix="/v1")
-app.include_router(workflows.router, prefix="/v1")
+app = FastAPI(
+    title="SDLC AI Platform",
+    version="1.0.0",
+)
 
-# Redirect /ui -> /ui/
-@app.get("/ui", include_in_schema=False)
-def ui_redirect():
-    return RedirectResponse(url="/ui/")
 
-# Static UI
+# -------------------------------------------------
+# API Routers
+# -------------------------------------------------
+
+app.include_router(health_router, prefix="/api")
+app.include_router(workflows_router, prefix="/api")
+
+
+# -------------------------------------------------
+# Admin UI (Static)
+# -------------------------------------------------
+
+# Serve static UI files
 app.mount(
     "/ui",
-    StaticFiles(directory=str(BASE_DIR / "ui"), html=True),
+    StaticFiles(directory="app/ui", html=True),
     name="ui",
 )
+
+
+# Friendly admin entrypoint
+@app.get("/admin", include_in_schema=False)
+def admin_ui():
+    """
+    Redirect to Admin Console UI.
+    """
+    return RedirectResponse(url="/ui/admin.html")

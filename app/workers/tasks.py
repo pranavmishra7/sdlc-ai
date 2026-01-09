@@ -1,79 +1,83 @@
-from app.workers.celery_worker import celery_app
-from app.workflows.sdlc_graph import build_graph
+from celery import shared_task
+from time import sleep
+import asyncio
+
 from app.state.sdlc_state import SDLCState
 from app.storage.job_store import JobStore
-from app.state.job_state import JobStatus
-from pydantic import BaseModel
-from typing import Any
-
-store = JobStore()
-graph = build_graph()
-
-STEPS = [
-    "intake",
-    "scope",
-    "requirements",
-    "architecture",
-    "estimation",
-    "risk",
-    "sow",
-]
+from app.workflows.sdlc_graph import run_sdlc_workflow
+from app.services.sse_manager import sse_manager
 
 
-# ✅ SAFE serializer (CRITICAL FIX)
-def safe_state_dump(state: Any) -> dict:
+@shared_task(bind=True)
+def run_sdlc_job(self, job_id: str):
     """
-    Safely serialize LangGraph state which may be:
-    - SDLCState (Pydantic)
-    - dict (from dict-returning nodes like SOW)
+    Run or resume SDLC workflow with per-step retry policies.
     """
-    if isinstance(state, dict):
-        return state
 
-    if isinstance(state, BaseModel):
-        return dict(state.__dict__)
+    job_store = JobStore(job_id)
+    status = job_store.load_status()
 
-    raise TypeError(f"Unsupported state type: {type(state)}")
+    if status is None:
+        raise RuntimeError(f"Job {job_id} not found")
 
+    state = SDLCState.from_dict(status)
 
-@celery_app.task(bind=True)
-def run_sdlc(self, job_id: str, product_idea: str):
-    step = None
-    try:
-        # mark job running
-        store.set_running(job_id)
+    # Do not run dead-lettered jobs
+    if state.is_dead_lettered():
+        return {"job_id": job_id, "status": "dead_letter"}
 
-        job = store.get(job_id)
-        start_step = store.get_next_step(job_id)
+    # Run workflow
+    state = run_sdlc_workflow(state)
+    job_store.save_status(state.to_dict())
 
-        # initial state
-        state = SDLCState(
-            job_id=job_id,
-            product_idea=product_idea
+    failed_step = state.failed_step()
+    if not failed_step:
+        return {"job_id": job_id, "status": "completed"}
+
+    # -------------------------
+    # Auto-retry with policy
+    # -------------------------
+    if state.can_auto_retry(failed_step):
+        state.increment_retry(failed_step)
+        state.steps[failed_step] = "pending"
+        job_store.save_status(state.to_dict())
+
+        asyncio.create_task(
+            sse_manager.publish(
+                job_id,
+                {
+                    "event": "step_auto_retry",
+                    "step": failed_step,
+                    "attempt": state.retries[failed_step],
+                    "max_attempts": state.max_retries_for(failed_step),
+                },
+            )
         )
 
-        # restore partial state (resume support)
-        if job and job.get("result"):
-            state = SDLCState(**job["result"])
+        # Linear backoff per attempt
+        sleep(5 * state.retries[failed_step])
 
-        steps = list(job["steps"].keys())
-        start_index = steps.index(start_step) if start_step else 0
+        return run_sdlc_job.delay(job_id)
 
-        for step in steps[start_index:]:
-            store.start_step(job_id, step)
+    # -------------------------
+    # Dead-letter
+    # -------------------------
+    state.mark_dead_letter(failed_step)
+    job_store.save_status(state.to_dict())
 
-            # LangGraph executes from this node forward
-            state = graph.invoke(state, start_at=step)
+    asyncio.create_task(
+        sse_manager.publish(
+            job_id,
+            {
+                "event": "job_dead_lettered",
+                "step": failed_step,
+                "error": state.dead_letter["error"],
+            },
+        )
+    )
 
-            store.complete_step(job_id, step)
-
-        # ✅ FINAL SAFE SAVE (NO model_dump)
-        store.complete(job_id, safe_state_dump(state))
-# exception handling
-    except Exception as e:
-        # mark failed step correctly
-        if step:
-            store.fail_step(job_id, step, repr(e))
-        else:
-            store.fail(job_id, repr(e))
-        raise
+    return {
+        "job_id": job_id,
+        "status": "dead_letter",
+        "failed_step": failed_step,
+    }

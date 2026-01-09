@@ -1,202 +1,229 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>SDLC AI</title>
+  <meta charset="UTF-8" />
+  <title>SDLC AI</title>
 
-<style>
-body {
-  font-family: Arial, sans-serif;
-  margin: 40px;
-  max-width: 900px;
-}
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      max-width: 900px;
+    }
 
-textarea#idea {
-  width: 100%;
-  height: 80px;
-}
+    textarea#idea-input {
+      width: 100%;
+      height: 80px;
+      padding: 8px;
+      font-size: 14px;
+    }
 
-button {
-  padding: 6px 12px;
-  cursor: pointer;
-}
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+    }
 
-.step {
-  padding: 10px;
-  margin: 8px 0;
-  border-radius: 6px;
-}
+    .step {
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 6px;
+    }
 
-.pending { background:#eee; }
-.running { background:#fff3cd; }
-.completed { background:#d4edda; }
-.failed { background:#f8d7da; }
+    .pending { background: #eee; }
+    .running { background: #fff3cd; }
+    .completed { background: #d4edda; }
+    .failed { background: #f8d7da; }
 
-.step-header {
-  display:flex;
-  justify-content:space-between;
-  cursor:pointer;
-  font-weight:bold;
-}
+    .step-header {
+      display: flex;
+      justify-content: space-between;
+      cursor: pointer;
+      font-weight: bold;
+    }
 
-.step-body {
-  display:none;
-  background:#111;
-  color:#0f0;
-  padding:10px;
-  margin-top:8px;
-  border-radius:4px;
-}
+    .step-body {
+      display: none;
+      margin-top: 10px;
+      background: #111;
+      color: #0f0;
+      padding: 10px;
+      border-radius: 4px;
+    }
 
-.step-body textarea {
-  width:100%;
-  min-height:220px;
-  background:#000;
-  color:#0f0;
-  border:1px solid #444;
-  font-family:monospace;
-  white-space:pre-wrap;
-}
-</style>
+    .step-body label {
+      display: block;
+      margin-top: 6px;
+      color: #9cdcfe;
+      font-weight: bold;
+    }
+
+    .step-body textarea {
+      width: 100%;
+      min-height: 220px;
+      background: #000;
+      color: #0f0;
+      border: 1px solid #444;
+      padding: 10px;
+      resize: vertical;
+      white-space: pre-wrap;
+      font-family: monospace;
+    }
+  </style>
 </head>
 
 <body>
 
 <h1>SDLC AI</h1>
 
-<textarea id="idea" placeholder="Describe your product idea..."></textarea><br><br>
+<h3>Product Idea</h3>
+<textarea id="idea-input"></textarea><br />
 <button onclick="startJob()">Start Job</button>
 
 <h3>Status</h3>
 <div id="job-status">Idle</div>
 
 <h3>Workflow Progress</h3>
-<div id="steps"></div>
+<div id="steps-container"></div>
 
 <script>
-const API = "/api/workflows";
+/* ================= STATE ================= */
 
 let jobId = null;
 let poller = null;
 
+const expanded = {};
 const stepCache = {};
-const stepExpanded = {};
 
-const LABELS = {
-  intake:"Problem Statement",
-  scope:"Scope Definition",
-  requirements:"Requirements Breakdown",
-  architecture:"Architecture Design",
-  estimation:"Effort Estimation",
-  risk:"Risk Analysis",
-  sow:"Statement of Work"
+const API = "/api/workflows";
+
+const STEP_LABELS = {
+  intake: "Problem Statement",
+  scope: "Scope Definition",
+  requirements: "Requirements Breakdown",
+  architecture: "Architecture Design",
+  estimation: "Effort Estimation",
+  risk: "Risk Analysis",
+  sow: "Statement of Work"
 };
 
+/* ================= JOB ================= */
+
 function startJob() {
+  const idea = document.getElementById("idea-input").value.trim();
+  if (!idea) return alert("Enter product idea");
+
   fetch(`${API}/start`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({ product_idea: idea.value })
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ product_idea: idea })
   })
-  .then(r=>r.json())
-  .then(d=>{
+  .then(r => r.json())
+  .then(d => {
     jobId = d.job_id;
-    stepCacheClear();
-    poller && clearInterval(poller);
-    poller = setInterval(fetchStatus,3000);
-    fetchStatus();
+    document.getElementById("job-status").innerText = `Job started: ${jobId}`;
+    Object.keys(expanded).forEach(k => delete expanded[k]);
+    Object.keys(stepCache).forEach(k => delete stepCache[k]);
+    startPolling();
   });
 }
 
-function stepCacheClear() {
-  for (const k in stepCache) delete stepCache[k];
-  for (const k in stepExpanded) delete stepExpanded[k];
+function startPolling() {
+  if (poller) clearInterval(poller);
+  poller = setInterval(fetchStatus, 3000);
 }
 
 function fetchStatus() {
   fetch(`${API}/${jobId}/status`)
-    .then(r=>r.json())
-    .then(render);
+    .then(r => r.json())
+    .then(renderStatus);
 }
 
-function render(data) {
-  jobStatusUpdate(data);
+/* ================= RENDER ================= */
 
-  const stepsDiv = document.getElementById("steps");
-  stepsDiv.innerHTML = "";
+function renderStatus(status) {
+  const container = document.getElementById("steps-container");
+  container.innerHTML = "";
 
-  Object.entries(data.steps).forEach(([step, state]) => {
+  if (status.current_step === "completed") {
+    document.getElementById("job-status").innerText = "Workflow completed ✅";
+    clearInterval(poller);
+    poller = null;
+  } else {
+    document.getElementById("job-status").innerText =
+      `Current step: ${STEP_LABELS[status.current_step]}`;
+  }
+
+  for (const [step, state] of Object.entries(status.steps)) {
     const stepDiv = document.createElement("div");
     stepDiv.className = `step ${state}`;
+    stepDiv.id = `step-${step}`;
 
     const header = document.createElement("div");
     header.className = "step-header";
+    header.id = `header-${step}`;
     header.innerHTML = `
-      <span>${LABELS[step]}</span>
-      <span class="step-status">${state}</span>
+      <span>${STEP_LABELS[step]}</span>
+      <span>${state}</span>
     `;
 
     const body = document.createElement("div");
     body.className = "step-body";
+    body.id = `body-${step}`;
 
-    if (stepExpanded[step]) {
+    if (expanded[step]) {
       body.style.display = "block";
-      if (stepCache[step]) {
-        renderBody(step, body);
-      }
+      if (stepCache[step]) renderStep(step);
     }
 
     header.onclick = () => {
-      if (state !== "completed" && state !== "failed") return;
-
-      stepExpanded[step] = !stepExpanded[step];
-      body.style.display = stepExpanded[step] ? "block" : "none";
-
-      if (stepExpanded[step] && !stepCache[step]) {
-        fetchStep(step, body);
-      }
+      expanded[step] = !expanded[step];
+      body.style.display = expanded[step] ? "block" : "none";
+      if (expanded[step] && !stepCache[step]) fetchStep(step);
     };
 
     stepDiv.appendChild(header);
     stepDiv.appendChild(body);
-    stepsDiv.appendChild(stepDiv);
-  });
-}
-
-function jobStatusUpdate(data) {
-  const el = document.getElementById("job-status");
-
-  if (data.current_step === "completed") {
-    el.innerText = "Workflow completed ✅";
-    poller && clearInterval(poller);
-    poller = null;
-  } else {
-    el.innerText = `Current step: ${LABELS[data.current_step]}`;
+    container.appendChild(stepDiv);
   }
 }
 
-function fetchStep(step, body) {
+/* ================= STEP DETAILS ================= */
+
+function fetchStep(step) {
   fetch(`${API}/${jobId}/steps/${step}`)
-    .then(r=>r.json())
-    .then(d=>{
+    .then(r => r.json())
+    .then(d => {
       stepCache[step] = d;
-      renderBody(step, body);
+      renderStep(step);
     });
 }
 
-function renderBody(step, body) {
-  const d = stepCache[step];
+function renderStep(step) {
+  const res = stepCache[step];
+  const body = document.getElementById(`body-${step}`);
+  if (!res || !body) return;
 
-  const text = d.output?.raw_output
-    ? d.output.raw_output.replace(/\\n/g,"\n")
-    : "No output";
+  const d = res.data || {};
+  const started = d.started_at ? new Date(d.started_at).toLocaleString() : "—";
+  const completed = d.completed_at ? new Date(d.completed_at).toLocaleString() : "—";
+
+  const duration =
+    d.started_at && d.completed_at
+      ? Math.round((new Date(d.completed_at) - new Date(d.started_at)) / 1000) + " sec"
+      : "—";
+
+  const output =
+    d.output?.raw_output
+      ? d.output.raw_output.replace(/\\n/g, "\n")
+      : "No output";
 
   body.innerHTML = `
-    <div>Status: ${d.status}</div>
-    <div>Started: ${d.started_at ?? "—"}</div>
-    <div>Completed: ${d.completed_at ?? "—"}</div>
-    <br>
-    <textarea readonly>${text}</textarea>
+    <label>Status:</label> ${d.status}
+    <label>Started At:</label> ${started}
+    <label>Completed At:</label> ${completed}
+    <label>Duration:</label> ${duration}
+    <label>Output:</label>
+    <textarea readonly>${output}</textarea>
   `;
 }
 </script>

@@ -5,27 +5,13 @@
   <title>SDLC AI</title>
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 40px;
-      max-width: 900px;
-    }
+    body { font-family: Arial; margin: 40px; max-width: 900px; }
+    textarea#idea { width: 100%; height: 80px; }
 
-    textarea#idea {
-      width: 100%;
-      height: 80px;
-    }
-
-    .step {
-      margin: 10px 0;
-      padding: 10px;
-      border-radius: 6px;
-    }
-
+    .step { margin: 10px 0; padding: 10px; border-radius: 6px; }
     .pending { background: #eee; }
     .running { background: #fff3cd; }
     .completed { background: #d4edda; }
-    .failed { background: #f8d7da; }
 
     .header {
       display: flex;
@@ -52,13 +38,12 @@
 
     .body textarea {
       width: 100%;
-      min-height: 180px;
+      min-height: 200px;
       background: #000;
       color: #0f0;
       border: 1px solid #444;
       padding: 10px;
       white-space: pre-wrap;
-      resize: vertical;
     }
   </style>
 </head>
@@ -78,14 +63,12 @@
 
 <script>
 const API = "/api/workflows";
-
 let jobId = null;
 let poller = null;
 
-/* internal UI state */
-const stepCreated = {};
-const stepExpanded = {};
-const stepDataCache = {};
+const created = {};
+const expanded = {};
+const cache = {};
 
 const LABELS = {
   intake: "Problem Statement",
@@ -97,7 +80,7 @@ const LABELS = {
   sow: "Statement of Work"
 };
 
-/* ---------------- START JOB ---------------- */
+/* ---------- START ---------- */
 
 function startJob() {
   fetch(`${API}/start`, {
@@ -108,17 +91,13 @@ function startJob() {
   .then(r => r.json())
   .then(d => {
     jobId = d.job_id;
-    document.getElementById("status").innerText =
-      `Job started (${jobId})`;
-
-    fetchStatus(); // immediate render
-
-    if (poller) clearInterval(poller);
+    status.innerText = `Job started (${jobId})`;
+    fetchStatus();
     poller = setInterval(fetchStatus, 3000);
   });
 }
 
-/* ---------------- STATUS ---------------- */
+/* ---------- STATUS ---------- */
 
 function fetchStatus() {
   fetch(`${API}/${jobId}/status`)
@@ -127,16 +106,14 @@ function fetchStatus() {
 }
 
 function updateUI(data) {
-  const statusEl = document.getElementById("status");
-
-  statusEl.innerText =
+  status.innerText =
     data.current_step === "completed"
       ? "Workflow completed ✅"
       : "Current step: " + LABELS[data.current_step];
 
   for (const step in data.steps) {
-    if (!stepCreated[step]) createStep(step);
-    updateStepState(step, data.steps[step]);
+    if (!created[step]) createStep(step);
+    updateStep(step, data.steps[step]);
   }
 
   if (data.current_step === "completed" && poller) {
@@ -145,83 +122,68 @@ function updateUI(data) {
   }
 }
 
-/* ---------------- STEP CREATION ---------------- */
+/* ---------- STEP UI ---------- */
 
 function createStep(step) {
-  const stepsContainer = document.getElementById("steps");
+  const container = document.getElementById("steps");
 
-  const stepDiv = document.createElement("div");
-  stepDiv.id = `step-${step}`;
-  stepDiv.className = "step pending";
+  const box = document.createElement("div");
+  box.id = `step-${step}`;
+  box.className = "step pending";
 
   const header = document.createElement("div");
   header.className = "header";
-  header.innerHTML = `
-    <span>${LABELS[step]}</span>
-    <span id="state-${step}">pending</span>
-  `;
+  header.innerHTML = `<span>${LABELS[step]}</span><span id="state-${step}"></span>`;
 
   const body = document.createElement("div");
-  body.className = "body";
   body.id = `body-${step}`;
+  body.className = "body";
 
   header.onclick = () => {
-    stepExpanded[step] = !stepExpanded[step];
-    body.style.display = stepExpanded[step] ? "block" : "none";
+    expanded[step] = !expanded[step];
+    body.style.display = expanded[step] ? "block" : "none";
 
-    if (stepExpanded[step] && !stepDataCache[step]) {
+    if (expanded[step] && !cache[step]) {
       fetchStep(step);
     }
   };
 
-  stepDiv.appendChild(header);
-  stepDiv.appendChild(body);
-  stepsContainer.appendChild(stepDiv);
+  box.appendChild(header);
+  box.appendChild(body);
+  container.appendChild(box);
 
-  stepCreated[step] = true;
+  created[step] = true;
 }
 
-/* ---------------- STEP STATE ---------------- */
+/* ---------- STEP STATE ---------- */
 
-function updateStepState(step, state) {
-  const stepDiv = document.getElementById(`step-${step}`);
-  const stateSpan = document.getElementById(`state-${step}`);
-
-  if (!stepDiv || !stateSpan) return;
-
-  stepDiv.className = `step ${state}`;
-  stateSpan.innerText = state;
+function updateStep(step, state) {
+  document.getElementById(`step-${step}`).className = `step ${state}`;
+  document.getElementById(`state-${step}`).innerText = state;
 }
 
-/* ---------------- STEP DATA ---------------- */
+/* ---------- STEP DATA ---------- */
 
 function fetchStep(step) {
   fetch(`${API}/${jobId}/steps/${step}`)
     .then(r => r.json())
     .then(res => {
-      stepDataCache[step] = res;
+      cache[step] = res;
       renderStep(step);
     });
 }
 
 function renderStep(step) {
   const body = document.getElementById(`body-${step}`);
-  const res = stepDataCache[step];
-  if (!body || !res) return;
-
-  const d = res.data || {};
-
-  const output =
-    d.output?.raw_output
-      ? d.output.raw_output.replace(/\\n/g, "\n")
-      : "No output";
+  const d = cache[step]?.data;
+  if (!d) return;
 
   body.innerHTML = `
-    <label>Status</label> ${d.status || "—"}
-    <label>Started</label> ${d.started_at || "—"}
-    <label>Completed</label> ${d.completed_at || "—"}
+    <label>Status</label> ${d.status}
+    <label>Started</label> ${d.started_at}
+    <label>Completed</label> ${d.completed_at}
     <label>Output</label>
-    <textarea readonly>${output}</textarea>
+    <textarea readonly>${d.output?.raw_output ?? "No output"}</textarea>
   `;
 }
 </script>

@@ -1,6 +1,7 @@
 import asyncio
 import json
 from uuid import uuid4
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
@@ -35,6 +36,18 @@ def start_or_resume(payload: dict):
     run_sdlc_job.delay(job_id)
 
     return {"job_id": job_id, "message": "Workflow started"}
+
+
+# -------------------------------------------------
+# Job Status (UI uses this)
+# -------------------------------------------------
+@router.get("/{job_id}/status")
+def get_job_status(job_id: str):
+    store = JobStore(job_id)
+    status = store.load_status()
+    if status is None:
+        raise HTTPException(404, "Job not found")
+    return status
 
 
 # -------------------------------------------------
@@ -74,7 +87,6 @@ def reset_dead_letter_job(job_id: str):
 
     failed_step = state.dead_letter["step"]
 
-    # Reset state
     state.dead_letter = None
     state.steps[failed_step] = "pending"
     state.errors.pop(failed_step, None)
@@ -86,19 +98,13 @@ def reset_dead_letter_job(job_id: str):
     asyncio.create_task(
         sse_manager.publish(
             job_id,
-            {
-                "event": "job_reset",
-                "step": failed_step,
-            },
+            {"event": "job_reset", "step": failed_step},
         )
     )
 
     run_sdlc_job.delay(job_id)
 
-    return {
-        "job_id": job_id,
-        "message": "Job reset and resumed",
-    }
+    return {"job_id": job_id, "message": "Job reset and resumed"}
 
 
 # -------------------------------------------------
@@ -122,11 +128,3 @@ async def stream_events(job_id: str, request: Request):
             sse_manager.unregister(job_id, queue)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
-
-    @router.get("/{job_id}/status")
-    def get_job_status(job_id: str):
-        store = JobStore(job_id)
-        status = store.load_status()
-        if status is None:
-            raise HTTPException(status_code=404, detail="Job not found")
-        return status

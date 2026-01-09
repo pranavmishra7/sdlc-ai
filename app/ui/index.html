@@ -29,25 +29,27 @@
       border-radius: 4px;
     }
 
+    .section {
+      margin-top: 14px;
+    }
+
     .section-title {
       color: #9cdcfe;
       font-weight: bold;
-      margin-top: 12px;
+      margin-bottom: 6px;
     }
 
     ul {
-      margin-top: 6px;
       padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 4px;
     }
 
     .meta {
       color: #8bc34a;
       font-size: 13px;
-    }
-
-    pre {
-      white-space: pre-wrap;
-      color: #0f0;
     }
   </style>
 </head>
@@ -175,51 +177,59 @@ function fetchStep(step) {
 
 function renderStep(step) {
   const body = document.getElementById(`body-${step}`);
-  const d = cache[step]?.data;
-  if (!d) return;
+  const raw = cache[step]?.data?.output?.raw_output;
+  if (!raw) {
+    body.innerHTML = "<div class='section'>No output</div>";
+    return;
+  }
 
   body.innerHTML = `
     <div class="meta">
-      Status: ${d.status}<br>
-      Started: ${d.started_at}<br>
-      Completed: ${d.completed_at}
+      Status: ${cache[step].data.status}<br>
+      Started: ${cache[step].data.started_at}<br>
+      Completed: ${cache[step].data.completed_at}
     </div>
-    ${renderFriendlyOutput(d.output?.raw_output)}
+    ${renderHumanReadable(raw)}
   `;
 }
 
-/* ---------------- OUTPUT FORMATTER ---------------- */
+/* ---------------- HUMAN OUTPUT ---------------- */
 
-function renderFriendlyOutput(text) {
-  if (!text) return "<div class='section-title'>No output</div>";
+function renderHumanReadable(text) {
+  // Remove markdown & JSON noise
+  const clean = text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/[{}"]/g, "")
+    .trim();
 
-  // Try to extract JSON block
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) {
-    return `<pre>${cleanText(text)}</pre>`;
-  }
+  const getBlock = (key) => {
+    const m = clean.match(new RegExp(`${key}[\\s\\S]*?(?=\\n\\n|$)`, "i"));
+    return m ? m[0].replace(key, "").trim() : null;
+  };
 
-  try {
-    const json = JSON.parse(match[0]);
-    const p = json.problem;
+  const problem = getBlock("description") || getBlock("problem");
+  const causes = getBlock("causes") || getBlock("symptoms");
+  const effects = getBlock("effects");
 
-    return `
-      <div class="section-title">Problem</div>
-      <div>${p.description}</div>
+  return `
+    ${problem ? `
+      <div class="section">
+        <div class="section-title">Problem</div>
+        <div>${problem}</div>
+      </div>` : ""}
 
-      <div class="section-title">Causes</div>
-      <ul>${p.causes.map(c => `<li>${c}</li>`).join("")}</ul>
+    ${causes ? `
+      <div class="section">
+        <div class="section-title">Causes</div>
+        <ul>${causes.split("\n").map(x => `<li>${x.replace(/[-,:]/g,"").trim()}</li>`).join("")}</ul>
+      </div>` : ""}
 
-      <div class="section-title">Effects</div>
-      <ul>${p.effects.map(e => `<li>${e}</li>`).join("")}</ul>
-    `;
-  } catch {
-    return `<pre>${cleanText(text)}</pre>`;
-  }
-}
-
-function cleanText(t) {
-  return t.replace(/```/g, "").trim();
+    ${effects ? `
+      <div class="section">
+        <div class="section-title">Effects</div>
+        <ul>${effects.split("\n").map(x => `<li>${x.replace(/[-,:]/g,"").trim()}</li>`).join("")}</ul>
+      </div>` : ""}
+  `;
 }
 </script>
 

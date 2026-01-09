@@ -213,12 +213,16 @@ function renderStatus(data) {
 }
 
 function fetchStepResult(step) {
+  if (stepOutputCache[step]) return; // ✅ prevent repeat fetch
+
   fetch(`${API}/${jobId}/steps/${step}`)
     .then(r => {
       if (!r.ok) throw new Error("Step not found");
       return r.json();
     })
     .then(data => {
+      stepOutputCache[step] = data; // ✅ cache result
+
       const pre = document.getElementById(`output-${step}`);
       if (!pre) return;
 

@@ -128,3 +128,23 @@ async def stream_events(job_id: str, request: Request):
             sse_manager.unregister(job_id, queue)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
+
+
+@router.get("/{job_id}/steps/{step}")
+def get_step(job_id: str, step: str):
+    store = JobStore(job_id)
+    status = store.load_status()
+    if status is None:
+        raise HTTPException(404, "Job not found")
+
+    if step not in status["steps"]:
+        raise HTTPException(404, "Step not found")
+
+    step_data = store.load_step(step)
+
+    return {
+        "step": step,
+        "status": status["steps"][step],
+        "data": step_data,
+        "error": status["errors"].get(step),
+    }

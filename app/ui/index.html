@@ -24,26 +24,30 @@
       display: none;
       margin-top: 10px;
       background: #111;
-      color: #0f0;
-      padding: 10px;
+      color: #ddd;
+      padding: 14px;
       border-radius: 4px;
     }
 
-    .body label {
-      display: block;
-      margin-top: 6px;
+    .section-title {
       color: #9cdcfe;
       font-weight: bold;
+      margin-top: 12px;
     }
 
-    .body textarea {
-      width: 100%;
-      min-height: 200px;
-      background: #000;
-      color: #0f0;
-      border: 1px solid #444;
-      padding: 10px;
+    ul {
+      margin-top: 6px;
+      padding-left: 20px;
+    }
+
+    .meta {
+      color: #8bc34a;
+      font-size: 13px;
+    }
+
+    pre {
       white-space: pre-wrap;
+      color: #0f0;
     }
   </style>
 </head>
@@ -80,7 +84,7 @@ const LABELS = {
   sow: "Statement of Work"
 };
 
-/* ---------- START ---------- */
+/* ---------------- START ---------------- */
 
 function startJob() {
   fetch(`${API}/start`, {
@@ -97,7 +101,7 @@ function startJob() {
   });
 }
 
-/* ---------- STATUS ---------- */
+/* ---------------- STATUS ---------------- */
 
 function fetchStatus() {
   fetch(`${API}/${jobId}/status`)
@@ -122,7 +126,7 @@ function updateUI(data) {
   }
 }
 
-/* ---------- STEP UI ---------- */
+/* ---------------- STEP UI ---------------- */
 
 function createStep(step) {
   const container = document.getElementById("steps");
@@ -142,27 +146,23 @@ function createStep(step) {
   header.onclick = () => {
     expanded[step] = !expanded[step];
     body.style.display = expanded[step] ? "block" : "none";
-
-    if (expanded[step] && !cache[step]) {
-      fetchStep(step);
-    }
+    if (expanded[step] && !cache[step]) fetchStep(step);
   };
 
   box.appendChild(header);
   box.appendChild(body);
   container.appendChild(box);
-
   created[step] = true;
 }
 
-/* ---------- STEP STATE ---------- */
+/* ---------------- STEP STATE ---------------- */
 
 function updateStep(step, state) {
   document.getElementById(`step-${step}`).className = `step ${state}`;
   document.getElementById(`state-${step}`).innerText = state;
 }
 
-/* ---------- STEP DATA ---------- */
+/* ---------------- STEP DATA ---------------- */
 
 function fetchStep(step) {
   fetch(`${API}/${jobId}/steps/${step}`)
@@ -179,12 +179,47 @@ function renderStep(step) {
   if (!d) return;
 
   body.innerHTML = `
-    <label>Status</label> ${d.status}
-    <label>Started</label> ${d.started_at}
-    <label>Completed</label> ${d.completed_at}
-    <label>Output</label>
-    <textarea readonly>${d.output?.raw_output ?? "No output"}</textarea>
+    <div class="meta">
+      Status: ${d.status}<br>
+      Started: ${d.started_at}<br>
+      Completed: ${d.completed_at}
+    </div>
+    ${renderFriendlyOutput(d.output?.raw_output)}
   `;
+}
+
+/* ---------------- OUTPUT FORMATTER ---------------- */
+
+function renderFriendlyOutput(text) {
+  if (!text) return "<div class='section-title'>No output</div>";
+
+  // Try to extract JSON block
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) {
+    return `<pre>${cleanText(text)}</pre>`;
+  }
+
+  try {
+    const json = JSON.parse(match[0]);
+    const p = json.problem;
+
+    return `
+      <div class="section-title">Problem</div>
+      <div>${p.description}</div>
+
+      <div class="section-title">Causes</div>
+      <ul>${p.causes.map(c => `<li>${c}</li>`).join("")}</ul>
+
+      <div class="section-title">Effects</div>
+      <ul>${p.effects.map(e => `<li>${e}</li>`).join("")}</ul>
+    `;
+  } catch {
+    return `<pre>${cleanText(text)}</pre>`;
+  }
+}
+
+function cleanText(t) {
+  return t.replace(/```/g, "").trim();
 }
 </script>
 

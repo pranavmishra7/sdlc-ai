@@ -141,19 +141,39 @@ function renderStatus(data) {
   const stepsDiv = document.getElementById("steps");
   stepsDiv.innerHTML = "";
 
+  /* -------- total workflow timing -------- */
+  if (data.started_at) {
+    const start = new Date(data.started_at);
+    const end = data.completed_at ? new Date(data.completed_at) : new Date();
+    const totalSec = Math.round((end - start) / 1000);
+
+    document.getElementById("status").innerText =
+      `Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}
+       | Total time: ${totalSec}s`;
+  }
+
   if (data.dead_letter) {
     document.getElementById("status").innerHTML =
       `<span class="error">❌ Job dead-lettered at ${STEP_LABELS[data.dead_letter.step]}</span>`;
     clearInterval(poller);
-  } else {
-    document.getElementById("status").innerText =
-      `Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}`;
   }
 
   for (const [step, state] of Object.entries(data.steps)) {
     const retries = data.retries?.[step] ?? 0;
     const maxRetries = data.retry_policy?.[step] ?? "—";
     const error = data.errors?.[step];
+    const meta = data.steps_meta?.[step] ?? {};
+
+    /* -------- step duration -------- */
+    let duration = "—";
+    if (meta.duration_sec !== undefined) {
+      duration = `${meta.duration_sec}s`;
+    } else if (meta.started_at) {
+      const end = meta.completed_at
+        ? new Date(meta.completed_at)
+        : new Date();
+      duration = `${Math.round((end - new Date(meta.started_at)) / 1000)}s`;
+    }
 
     const div = document.createElement("div");
     div.className = `step ${state}`;
@@ -164,6 +184,7 @@ function renderStatus(data) {
       <strong>${STEP_LABELS[step]}</strong>
       <span class="meta">
         ${state}
+        | time: ${duration}
         | retries: ${retries}/${maxRetries}
         ${state === "failed" ? `<button onclick="retryJob()">Retry</button>` : ""}
       </span>
@@ -209,7 +230,6 @@ function attachSSE() {
 
   evtSource.onmessage = (e) => {
     const msg = JSON.parse(e.data);
-
     if (
       msg.event === "step_completed" ||
       msg.event === "step_failed" ||
@@ -226,8 +246,7 @@ function retryJob() {
 
   fetch(`${API}/${jobId}/retry`, { method: "POST" })
     .then(() => {
-      document.getElementById("status").innerText =
-        "Retry triggered…";
+      document.getElementById("status").innerText = "Retry triggered…";
       startPolling();
     });
 }

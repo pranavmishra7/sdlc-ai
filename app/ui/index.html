@@ -66,6 +66,7 @@
       display: none;
       font-size: 12px;
       overflow-x: auto;
+      white-space: pre-wrap;
     }
 
     h3 {
@@ -96,7 +97,7 @@ let jobId = null;
 let poller = null;
 let evtSource = null;
 
-/* ✅ caches */
+/* caches */
 const stepOutputCache = {};
 const stepExpandedState = {};
 
@@ -129,10 +130,11 @@ function startJob() {
     .then(r => r.json())
     .then(data => {
       jobId = data.job_id;
+
       document.getElementById("status").innerText =
         `Job started (ID: ${jobId})`;
 
-      /* reset UI state */
+      // reset UI state
       Object.keys(stepOutputCache).forEach(k => delete stepOutputCache[k]);
       Object.keys(stepExpandedState).forEach(k => delete stepExpandedState[k]);
 
@@ -162,13 +164,28 @@ function renderStatus(data) {
   const stepsDiv = document.getElementById("steps");
   stepsDiv.innerHTML = "";
 
-  document.getElementById("status").innerText =
-    `Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}`;
+  // ---- STOP polling once completed ----
+  if (data.current_step === "completed") {
+    document.getElementById("status").innerText = "Workflow completed ✅";
+
+    if (poller) {
+      clearInterval(poller);
+      poller = null;
+    }
+
+    if (evtSource) {
+      evtSource.close();
+      evtSource = null;
+    }
+  } else {
+    document.getElementById("status").innerText =
+      `Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}`;
+  }
 
   if (data.dead_letter) {
     document.getElementById("status").innerHTML =
       `<span class="error">❌ Job dead-lettered at ${STEP_LABELS[data.dead_letter.step]}</span>`;
-    clearInterval(poller);
+    return;
   }
 
   for (const [step, state] of Object.entries(data.steps)) {
@@ -190,18 +207,37 @@ function renderStatus(data) {
     const pre = document.createElement("pre");
     pre.id = `output-${step}`;
 
-    /* restore expanded state */
+    // ---- restore expanded state & content ----
     if (stepExpandedState[step]) {
       pre.style.display = "block";
+
+      if (stepOutputCache[step]) {
+        pre.textContent = JSON.stringify(
+          stepOutputCache[step].data ??
+          stepOutputCache[step].output ??
+          stepOutputCache[step],
+          null,
+          2
+        );
+      }
     }
 
     header.onclick = () => {
       stepExpandedState[step] = !stepExpandedState[step];
       pre.style.display = stepExpandedState[step] ? "block" : "none";
 
-      /* fetch lazily on first expand */
-      if (stepExpandedState[step] && !stepOutputCache[step]) {
-        fetchStepResult(step);
+      if (stepExpandedState[step]) {
+        if (stepOutputCache[step]) {
+          pre.textContent = JSON.stringify(
+            stepOutputCache[step].data ??
+            stepOutputCache[step].output ??
+            stepOutputCache[step],
+            null,
+            2
+          );
+        } else {
+          fetchStepResult(step);
+        }
       }
     };
 
@@ -210,9 +246,9 @@ function renderStatus(data) {
     stepsDiv.appendChild(div);
 
     if (state === "failed" && error) {
+      stepExpandedState[step] = true;
       pre.style.display = "block";
       pre.textContent = JSON.stringify(error, null, 2);
-      stepExpandedState[step] = true;
     }
   }
 }

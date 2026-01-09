@@ -96,8 +96,9 @@ let jobId = null;
 let poller = null;
 let evtSource = null;
 
-/* ✅ FIX: cache to prevent repeated step fetches */
+/* ✅ caches */
 const stepOutputCache = {};
+const stepExpandedState = {};
 
 const API = "/api/workflows";
 
@@ -131,8 +132,9 @@ function startJob() {
       document.getElementById("status").innerText =
         `Job started (ID: ${jobId})`;
 
-      /* reset state for new job */
+      /* reset UI state */
       Object.keys(stepOutputCache).forEach(k => delete stepOutputCache[k]);
+      Object.keys(stepExpandedState).forEach(k => delete stepExpandedState[k]);
 
       startPolling();
       attachSSE();
@@ -188,22 +190,29 @@ function renderStatus(data) {
     const pre = document.createElement("pre");
     pre.id = `output-${step}`;
 
+    /* restore expanded state */
+    if (stepExpandedState[step]) {
+      pre.style.display = "block";
+    }
+
     header.onclick = () => {
-      pre.style.display = pre.style.display === "block" ? "none" : "block";
+      stepExpandedState[step] = !stepExpandedState[step];
+      pre.style.display = stepExpandedState[step] ? "block" : "none";
+
+      /* fetch lazily on first expand */
+      if (stepExpandedState[step] && !stepOutputCache[step]) {
+        fetchStepResult(step);
+      }
     };
 
     div.appendChild(header);
     div.appendChild(pre);
     stepsDiv.appendChild(div);
 
-    /* ✅ fetch output ONCE per completed step */
-    if (state === "completed") {
-      fetchStepResult(step);
-    }
-
     if (state === "failed" && error) {
       pre.style.display = "block";
       pre.textContent = JSON.stringify(error, null, 2);
+      stepExpandedState[step] = true;
     }
   }
 }
@@ -211,7 +220,7 @@ function renderStatus(data) {
 /* ================= STEP OUTPUT ================= */
 
 function fetchStepResult(step) {
-  if (stepOutputCache[step]) return; // ✅ FIX: stop repeated calls
+  if (stepOutputCache[step]) return;
 
   fetch(`${API}/${jobId}/steps/${step}`)
     .then(r => {
@@ -224,7 +233,11 @@ function fetchStepResult(step) {
       const pre = document.getElementById(`output-${step}`);
       if (!pre) return;
 
-      pre.textContent = JSON.stringify(data.data ?? data, null, 2);
+      pre.textContent = JSON.stringify(
+        data.data ?? data.output ?? data,
+        null,
+        2
+      );
     })
     .catch(console.error);
 }

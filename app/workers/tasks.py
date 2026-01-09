@@ -18,29 +18,37 @@ def _safe_emit(job_id: str, payload: dict):
 def run_sdlc_job(self, job_id: str):
     """
     Celery entrypoint.
-    Receives ONLY job_id (string).
+    Executes EXACTLY ONE SDLC step.
+    Re-enqueues itself until workflow is completed.
     """
+
     job_store = JobStore(job_id)
 
-    # Load state from storage
+    # Load persisted state
     state_data = job_store.load_status()
     state = SDLCState.from_dict(state_data)
 
     _safe_emit(job_id, {
-        "event": "job_started",
+        "event": "job_step_started",
         "job_id": job_id,
+        "step": state.current_step,
     })
 
-    # Run workflow
+    # Run ONE step
     state = run_sdlc_workflow(state)
 
-    # Persist final state
+    # Persist state
     job_store.save_status(state.to_dict())
 
     _safe_emit(job_id, {
-        "event": "job_finished",
+        "event": "job_step_finished",
         "job_id": job_id,
-        "status": state.current_step,
+        "step": state.current_step,
     })
+
+    # 🔥 THIS IS THE MISSING PART
+    # If workflow is not done, enqueue next step
+    if state.current_step not in ("completed", "dead_letter"):
+        run_sdlc_job.delay(job_id)
 
     return state.to_dict()

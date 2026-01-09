@@ -11,7 +11,7 @@
       max-width: 900px;
     }
 
-    textarea {
+    textarea#idea-input {
       width: 100%;
       height: 80px;
       padding: 8px;
@@ -22,11 +22,6 @@
       padding: 6px 12px;
       cursor: pointer;
       margin-left: 6px;
-    }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
     }
 
     .step {
@@ -53,24 +48,34 @@
       opacity: 0.8;
     }
 
-    .error {
-      color: #b00020;
-      font-weight: bold;
-    }
-
-    pre {
+    .step-body {
+      display: none;
+      margin-top: 8px;
       background: #111;
       color: #0f0;
       padding: 10px;
-      margin-top: 8px;
-      display: none;
-      font-size: 12px;
-      overflow-x: auto;
-      white-space: pre-wrap;
+      border-radius: 4px;
     }
 
-    h3 {
-      margin-top: 30px;
+    .step-body label {
+      display: block;
+      margin-top: 6px;
+      font-weight: bold;
+      color: #9cdcfe;
+    }
+
+    .step-body textarea {
+      width: 100%;
+      min-height: 220px;
+      resize: vertical;
+      background: #000;
+      color: #0f0;
+      border: 1px solid #444;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 13px;
+      margin-top: 6px;
+      white-space: pre-wrap;
     }
   </style>
 </head>
@@ -80,26 +85,25 @@
 <h1>SDLC AI</h1>
 
 <h3>Product Idea</h3>
-<textarea id="idea" placeholder="Describe your product idea..."></textarea>
+<textarea id="idea-input" placeholder="Describe your product idea..."></textarea>
 <br />
 <button onclick="startJob()">Start Job</button>
 
 <h3>Status</h3>
-<div id="status">Idle</div>
+<div id="job-status">Idle</div>
 
 <h3>Workflow Progress</h3>
-<div id="steps"></div>
+<div id="steps-container"></div>
 
 <script>
-/* ================= GLOBAL STATE ================= */
+/* ================= STATE ================= */
 
 let jobId = null;
 let poller = null;
 let evtSource = null;
 
-/* caches */
 const stepOutputCache = {};
-const stepExpandedState = {};
+const stepExpanded = {};
 
 const API = "/api/workflows";
 
@@ -113,14 +117,11 @@ const STEP_LABELS = {
   sow: "Statement of Work"
 };
 
-/* ================= JOB CONTROL ================= */
+/* ================= JOB ================= */
 
 function startJob() {
-  const idea = document.getElementById("idea").value.trim();
-  if (!idea) {
-    alert("Please enter a product idea");
-    return;
-  }
+  const idea = document.getElementById("idea-input").value.trim();
+  if (!idea) return alert("Please enter a product idea");
 
   fetch(`${API}/start`, {
     method: "POST",
@@ -130,18 +131,15 @@ function startJob() {
     .then(r => r.json())
     .then(data => {
       jobId = data.job_id;
+      document.getElementById("job-status").innerText =
+        `Job started (${jobId})`;
 
-      document.getElementById("status").innerText =
-        `Job started (ID: ${jobId})`;
-
-      // reset UI state
       Object.keys(stepOutputCache).forEach(k => delete stepOutputCache[k]);
-      Object.keys(stepExpandedState).forEach(k => delete stepExpandedState[k]);
+      Object.keys(stepExpanded).forEach(k => delete stepExpanded[k]);
 
       startPolling();
       attachSSE();
-    })
-    .catch(console.error);
+    });
 }
 
 function startPolling() {
@@ -151,150 +149,122 @@ function startPolling() {
 
 function fetchStatus() {
   if (!jobId) return;
-
   fetch(`${API}/${jobId}/status`)
     .then(r => r.json())
-    .then(renderStatus)
-    .catch(console.error);
+    .then(renderStatus);
 }
 
-/* ================= RENDERING ================= */
+/* ================= RENDER ================= */
 
 function renderStatus(data) {
-  const stepsDiv = document.getElementById("steps");
-  stepsDiv.innerHTML = "";
+  const container = document.getElementById("steps-container");
+  container.innerHTML = "";
 
-  // ---- STOP polling once completed ----
   if (data.current_step === "completed") {
-    document.getElementById("status").innerText = "Workflow completed ✅";
-
-    if (poller) {
-      clearInterval(poller);
-      poller = null;
-    }
-
-    if (evtSource) {
-      evtSource.close();
-      evtSource = null;
-    }
+    document.getElementById("job-status").innerText =
+      "Workflow completed ✅";
+    clearInterval(poller);
+    poller = null;
+    if (evtSource) evtSource.close();
   } else {
-    document.getElementById("status").innerText =
+    document.getElementById("job-status").innerText =
       `Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}`;
   }
 
-  if (data.dead_letter) {
-    document.getElementById("status").innerHTML =
-      `<span class="error">❌ Job dead-lettered at ${STEP_LABELS[data.dead_letter.step]}</span>`;
-    return;
-  }
-
   for (const [step, state] of Object.entries(data.steps)) {
-    const retries = data.retries?.[step] ?? 0;
-    const error = data.errors?.[step];
-
-    const div = document.createElement("div");
-    div.className = `step ${state}`;
+    const stepDiv = document.createElement("div");
+    stepDiv.id = `step-${step}`;
+    stepDiv.className = `step ${state}`;
 
     const header = document.createElement("div");
+    header.id = `step-header-${step}`;
     header.className = "step-header";
     header.innerHTML = `
       <strong>${STEP_LABELS[step]}</strong>
-      <span class="meta">
-        ${state} | retries: ${retries}
-      </span>
+      <span class="meta">${state}</span>
     `;
 
-    const pre = document.createElement("pre");
-    pre.id = `output-${step}`;
+    const body = document.createElement("div");
+    body.id = `step-body-${step}`;
+    body.className = "step-body";
 
-    // ---- restore expanded state & content ----
-    if (stepExpandedState[step]) {
-      pre.style.display = "block";
-
+    if (stepExpanded[step]) {
+      body.style.display = "block";
       if (stepOutputCache[step]) {
-        pre.textContent = JSON.stringify(
-          stepOutputCache[step].data ??
-          stepOutputCache[step].output ??
-          stepOutputCache[step],
-          null,
-          2
-        );
+        renderStepOutput(step);
       }
     }
 
     header.onclick = () => {
-      stepExpandedState[step] = !stepExpandedState[step];
-      pre.style.display = stepExpandedState[step] ? "block" : "none";
+      stepExpanded[step] = !stepExpanded[step];
+      body.style.display = stepExpanded[step] ? "block" : "none";
 
-      if (stepExpandedState[step]) {
-        if (stepOutputCache[step]) {
-          pre.textContent = JSON.stringify(
-            stepOutputCache[step].data ??
-            stepOutputCache[step].output ??
-            stepOutputCache[step],
-            null,
-            2
-          );
-        } else {
-          fetchStepResult(step);
-        }
+      if (stepExpanded[step]) {
+        stepOutputCache[step]
+          ? renderStepOutput(step)
+          : fetchStep(step);
       }
     };
 
-    div.appendChild(header);
-    div.appendChild(pre);
-    stepsDiv.appendChild(div);
-
-    if (state === "failed" && error) {
-      stepExpandedState[step] = true;
-      pre.style.display = "block";
-      pre.textContent = JSON.stringify(error, null, 2);
-    }
+    stepDiv.appendChild(header);
+    stepDiv.appendChild(body);
+    container.appendChild(stepDiv);
   }
 }
 
-/* ================= STEP OUTPUT ================= */
+/* ================= STEP ================= */
 
-function fetchStepResult(step) {
-  if (stepOutputCache[step]) return;
-
+function fetchStep(step) {
   fetch(`${API}/${jobId}/steps/${step}`)
-    .then(r => {
-      if (!r.ok) throw new Error("Step not found");
-      return r.json();
-    })
+    .then(r => r.json())
     .then(data => {
       stepOutputCache[step] = data;
+      renderStepOutput(step);
+    });
+}
 
-      const pre = document.getElementById(`output-${step}`);
-      if (!pre) return;
+function renderStepOutput(step) {
+  const data = stepOutputCache[step];
+  const body = document.getElementById(`step-body-${step}`);
+  if (!data || !body) return;
 
-      pre.textContent = JSON.stringify(
-        data.data ?? data.output ?? data,
-        null,
-        2
-      );
-    })
-    .catch(console.error);
+  const started = data.started_at
+    ? new Date(data.started_at).toLocaleString()
+    : "—";
+
+  const completed = data.completed_at
+    ? new Date(data.completed_at).toLocaleString()
+    : "—";
+
+  const duration =
+    data.started_at && data.completed_at
+      ? Math.round(
+          (new Date(data.completed_at) -
+           new Date(data.started_at)) / 1000
+        ) + " sec"
+      : "—";
+
+  const text =
+    data.output?.raw_output
+      ? data.output.raw_output.replace(/\\n/g, "\n")
+      : "No output";
+
+  body.innerHTML = `
+    <label>Status:</label> ${data.status}
+    <label>Started At:</label> ${started}
+    <label>Completed At:</label> ${completed}
+    <label>Duration:</label> ${duration}
+    <label>Output:</label>
+    <textarea id="step-textarea-${step}" readonly>${text}</textarea>
+  `;
 }
 
 /* ================= SSE ================= */
 
 function attachSSE() {
   if (evtSource) evtSource.close();
-
   evtSource = new EventSource(`${API}/events/${jobId}`);
-
-  evtSource.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    if (
-      msg.event === "step_completed" ||
-      msg.event === "step_failed" ||
-      msg.event === "job_dead_lettered"
-    ) {
-      fetchStatus();
-    }
-  };
+  evtSource.onmessage = () => fetchStatus();
 }
 </script>
 

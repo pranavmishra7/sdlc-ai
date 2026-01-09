@@ -216,52 +216,66 @@
     }
 
     /* ---------------- HUMAN OUTPUT ---------------- */
-    function renderHumanReadable(text) {
-      // normalize
-      const src = text
-        .replace(/```[\s\S]*?```/g, "")
-        .replace(/\r/g, "")
+    function cleanText(text) {
+      return text
+        .replace(/```[\s\S]*?```/g, "")          // remove code fences
+        .replace(/Status:.*?\n/gi, "")
+        .replace(/Started:.*?\n/gi, "")
+        .replace(/Completed:.*?\n/gi, "")
+        .replace(/[{}\[\]"]/g, "")               // remove JSON symbols
+        .replace(/\\n/g, "\n")
+        .replace(/\s+/g, " ")
         .trim();
+    }
 
-      function extract(key, nextKeys) {
-        const pattern = new RegExp(
-          key + "\\s*[:\\-]?([\\s\\S]*?)(" + nextKeys.join("|") + "|$)",
-          "i"
-        );
-        const match = src.match(pattern);
-        return match ? match[1].trim() : null;
-      }
+    function extractSection(source, startKey, endKeys = []) {
+      const endPattern = endKeys.length
+        ? endKeys.join("|")
+        : "$";
 
-      const problem = extract(
-        "description",
-        ["causes", "symptoms", "effects", "target audience"]
+      const regex = new RegExp(
+        startKey + "\\s*(.*?)(?=" + endPattern + "|$)",
+        "i"
       );
 
-      const causesRaw = extract(
-        "(causes|symptoms)",
+      const match = source.match(regex);
+      return match ? match[1].trim() : "";
+    }
+
+    function toBullets(text) {
+      return text
+        .split(/[,•\n]/)
+        .map(t => t.trim())
+        .filter(t => t.length > 3)
+        .map(t => `<li>${t}</li>`)
+        .join("");
+    }
+
+    function renderHumanReadable(rawText) {
+      const text = cleanText(rawText);
+
+      const problem = extractSection(
+        text,
+        "problem",
+        ["causes", "effects", "target audience"]
+      );
+
+      const causes = extractSection(
+        text,
+        "causes",
         ["effects", "target audience"]
       );
 
-      const effectsRaw = extract(
+      const effects = extractSection(
+        text,
         "effects",
         ["target audience"]
       );
 
-      const target = extract(
-        "target audience",
-        []
+      const target = extractSection(
+        text,
+        "target audience"
       );
-
-      function toList(raw) {
-        if (!raw) return "";
-        return raw
-          .replace(/[\[\]]/g, "")
-          .split(/[\n,]/)
-          .map(x => x.trim())
-          .filter(Boolean)
-          .map(x => `<li>${x}</li>`)
-          .join("");
-      }
 
       return `
     ${problem ? `
@@ -270,16 +284,16 @@
         <div>${problem}</div>
       </div>` : ""}
 
-    ${causesRaw ? `
+    ${causes ? `
       <div class="section">
         <div class="section-title">Causes</div>
-        <ul>${toList(causesRaw)}</ul>
+        <ul>${toBullets(causes)}</ul>
       </div>` : ""}
 
-    ${effectsRaw ? `
+    ${effects ? `
       <div class="section">
         <div class="section-title">Effects</div>
-        <ul>${toList(effectsRaw)}</ul>
+        <ul>${toBullets(effects)}</ul>
       </div>` : ""}
 
     ${target ? `
@@ -289,6 +303,7 @@
       </div>` : ""}
   `;
     }
+
 
 
   </script>

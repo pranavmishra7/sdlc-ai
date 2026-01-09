@@ -90,9 +90,14 @@
 <div id="steps"></div>
 
 <script>
+/* ================= GLOBAL STATE ================= */
+
 let jobId = null;
 let poller = null;
 let evtSource = null;
+
+/* ✅ FIX: cache to prevent repeated step fetches */
+const stepOutputCache = {};
 
 const API = "/api/workflows";
 
@@ -106,8 +111,14 @@ const STEP_LABELS = {
   sow: "Statement of Work"
 };
 
+/* ================= JOB CONTROL ================= */
+
 function startJob() {
-  const idea = document.getElementById("idea").value;
+  const idea = document.getElementById("idea").value.trim();
+  if (!idea) {
+    alert("Please enter a product idea");
+    return;
+  }
 
   fetch(`${API}/start`, {
     method: "POST",
@@ -119,9 +130,14 @@ function startJob() {
       jobId = data.job_id;
       document.getElementById("status").innerText =
         `Job started (ID: ${jobId})`;
+
+      /* reset state for new job */
+      Object.keys(stepOutputCache).forEach(k => delete stepOutputCache[k]);
+
       startPolling();
       attachSSE();
-    });
+    })
+    .catch(console.error);
 }
 
 function startPolling() {
@@ -134,23 +150,18 @@ function fetchStatus() {
 
   fetch(`${API}/${jobId}/status`)
     .then(r => r.json())
-    .then(renderStatus);
+    .then(renderStatus)
+    .catch(console.error);
 }
+
+/* ================= RENDERING ================= */
 
 function renderStatus(data) {
   const stepsDiv = document.getElementById("steps");
   stepsDiv.innerHTML = "";
 
-  /* -------- total workflow timing -------- */
-  if (data.started_at) {
-    const start = new Date(data.started_at);
-    const end = data.completed_at ? new Date(data.completed_at) : new Date();
-    const totalSec = Math.round((end - start) / 1000);
-
-    document.getElementById("status").innerText =
-      `Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}
-       | Total time: ${totalSec}s`;
-  }
+  document.getElementById("status").innerText =
+    `Current step: ${STEP_LABELS[data.current_step] ?? data.current_step}`;
 
   if (data.dead_letter) {
     document.getElementById("status").innerHTML =
@@ -160,20 +171,7 @@ function renderStatus(data) {
 
   for (const [step, state] of Object.entries(data.steps)) {
     const retries = data.retries?.[step] ?? 0;
-    const maxRetries = data.retry_policy?.[step] ?? "—";
     const error = data.errors?.[step];
-    const meta = data.steps_meta?.[step] ?? {};
-
-    /* -------- step duration -------- */
-    let duration = "—";
-    if (meta.duration_sec !== undefined) {
-      duration = `${meta.duration_sec}s`;
-    } else if (meta.started_at) {
-      const end = meta.completed_at
-        ? new Date(meta.completed_at)
-        : new Date();
-      duration = `${Math.round((end - new Date(meta.started_at)) / 1000)}s`;
-    }
 
     const div = document.createElement("div");
     div.className = `step ${state}`;
@@ -183,10 +181,7 @@ function renderStatus(data) {
     header.innerHTML = `
       <strong>${STEP_LABELS[step]}</strong>
       <span class="meta">
-        ${state}
-        | time: ${duration}
-        | retries: ${retries}/${maxRetries}
-        ${state === "failed" ? `<button onclick="retryJob()">Retry</button>` : ""}
+        ${state} | retries: ${retries}
       </span>
     `;
 
@@ -194,13 +189,14 @@ function renderStatus(data) {
     pre.id = `output-${step}`;
 
     header.onclick = () => {
-      pre.style.display = pre.style.display === "none" ? "block" : "none";
+      pre.style.display = pre.style.display === "block" ? "none" : "block";
     };
 
     div.appendChild(header);
     div.appendChild(pre);
     stepsDiv.appendChild(div);
 
+    /* ✅ fetch output ONCE per completed step */
     if (state === "completed") {
       fetchStepResult(step);
     }
@@ -212,8 +208,10 @@ function renderStatus(data) {
   }
 }
 
+/* ================= STEP OUTPUT ================= */
+
 function fetchStepResult(step) {
-  if (stepOutputCache[step]) return; // ✅ prevent repeat fetch
+  if (stepOutputCache[step]) return; // ✅ FIX: stop repeated calls
 
   fetch(`${API}/${jobId}/steps/${step}`)
     .then(r => {
@@ -221,18 +219,17 @@ function fetchStepResult(step) {
       return r.json();
     })
     .then(data => {
-      stepOutputCache[step] = data; // ✅ cache result
+      stepOutputCache[step] = data;
 
       const pre = document.getElementById(`output-${step}`);
       if (!pre) return;
 
-      pre.style.display = "block";
       pre.textContent = JSON.stringify(data.data ?? data, null, 2);
     })
-    .catch(err => {
-      console.error(err);
-    });
+    .catch(console.error);
 }
+
+/* ================= SSE ================= */
 
 function attachSSE() {
   if (evtSource) evtSource.close();
@@ -244,22 +241,11 @@ function attachSSE() {
     if (
       msg.event === "step_completed" ||
       msg.event === "step_failed" ||
-      msg.event === "step_auto_retry" ||
       msg.event === "job_dead_lettered"
     ) {
       fetchStatus();
     }
   };
-}
-
-function retryJob() {
-  if (!jobId) return;
-
-  fetch(`${API}/${jobId}/retry`, { method: "POST" })
-    .then(() => {
-      document.getElementById("status").innerText = "Retry triggered…";
-      startPolling();
-    });
 }
 </script>
 

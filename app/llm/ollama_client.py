@@ -14,6 +14,8 @@ class OllamaClient:
         self.model = model or settings.OLLAMA_MODEL
 
     def generate(self, prompt: str) -> str:
+        print("Using Ollama model:", self.model)
+
         payload = {
             "model": self.model,
             "messages": [
@@ -33,7 +35,7 @@ class OllamaClient:
             },
             "stream": False
         }
-
+        
         response = requests.post(
             self.url,
             json=payload,

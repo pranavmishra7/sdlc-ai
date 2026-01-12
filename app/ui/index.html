@@ -200,20 +200,37 @@
     function renderStep(step) {
       const body = document.getElementById(`body-${step}`);
       const raw = cache[step]?.data?.output?.raw_output;
+
       if (!raw) {
         body.innerHTML = "<div class='section'>No output</div>";
         return;
       }
 
-      body.innerHTML = `
+      const meta = `
     <div class="meta">
       Status: ${cache[step].data.status}<br>
       Started: ${cache[step].data.started_at}<br>
       Completed: ${cache[step].data.completed_at}
     </div>
-    ${renderHumanReadable(raw)}
+  `;
+
+      // Intake gets special structured rendering
+      if (step === "intake") {
+        body.innerHTML = meta + renderHumanReadable(raw);
+        return;
+      }
+
+      // All other steps: show clean readable text
+      body.innerHTML = `
+    ${meta}
+    <div class="section">
+      <pre style="white-space: pre-wrap; color:#ddd; font-family: inherit;">
+${raw}
+      </pre>
+    </div>
   `;
     }
+
 
     /* ---------------- HUMAN OUTPUT ---------------- */
     function cleanText(text) {

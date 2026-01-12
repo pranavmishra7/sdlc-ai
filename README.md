@@ -41,3 +41,10 @@ sudo apt install -y \
   libreadline-dev libsqlite3-dev libffi-dev \
   libncurses5-dev libncursesw5-dev liblzma-dev \
   xz-utils tk-dev ca-certificates curl
+
+ ## after restarting vm 
+  pkill -f celery
+  redis run
+  ollama serve
+  ollama run llama3.2:3b "warmup"
+  uvicorn app.main:app --host 0.0.0.0 --port 8000

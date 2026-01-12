@@ -1,74 +1,60 @@
-import asyncio
+import json
+import re
+from typing import Any, Dict
+
 from app.state.sdlc_state import SDLCState
 from app.agents.requirements_agent import run_requirements
-from app.storage.job_store import JobStore
-from app.services.sse_manager import sse_manager
 
 
-def _safe_emit(job_id: str, payload: dict):
+def _extract_json_block(text: str) -> Dict[str, Any]:
     """
-    Safely emit SSE event from sync context (Celery-safe).
+    Extracts the FIRST JSON object found in the text.
+    Raises ValueError if extraction or parsing fails.
     """
+
+    # Match ```json ... ``` OR first {...}
+    fence_match = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
+    raw_json = fence_match.group(1) if fence_match else None
+
+    if raw_json is None:
+        brace_match = re.search(r"(\{[\s\S]*\})", text)
+        raw_json = brace_match.group(1) if brace_match else None
+
+    if raw_json is None:
+        raise ValueError("No JSON object found in requirements output")
+
     try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(sse_manager.publish(job_id, payload))
-    except RuntimeError:
-        # No running event loop (Celery worker)
-        pass
+        return json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in requirements output: {exc}") from exc
 
 
 def requirements_node(state: SDLCState) -> SDLCState:
-    job_store = JobStore(state.job_id)
+    """
+    Requirements node.
+    Applies runtime schema parsing ONLY here.
+    """
 
-    try:
-        # Mark running
-        state.mark_step_running("requirements")
-        job_store.save_status(state.to_dict())
+    # Provide full accumulated context
+    context = state.get_context()
 
-        # Execute agent
-        result = run_requirements({
-            "intake": state.intake,
-            "scope": state.scope,
-        })
+    # Run agent (may raise)
+    agent_result = run_requirements(context)
 
-        # Persist step output
-        job_store.save_step("requirements", result)
+    # agent_result is expected to be:
+    # {
+    #   "raw_output": "<verbatim llm output>"
+    # }
 
-        # Update state
-        state.requirements = result
-        state.mark_step_completed("requirements")
-        state.current_step = "architecture"   # ✅ FIX
-        job_store.save_status(state.to_dict())
+    raw = agent_result["raw_output"]
 
-        # Emit success SSE event
-        _safe_emit(
-            state.job_id,
-            {
-                "event": "step_completed",
-                "step": "requirements",
-                "data": result,
-            },
-        )
+    # Parse JSON deterministically (raw preserved regardless)
+    parsed = _extract_json_block(raw)
 
-        return state
+    output = {
+        "type": "json",
+        "raw": raw,        # 🔒 NEVER modified
+        "parsed": parsed,  # ✅ structured, safe
+    }
 
-    except Exception as exc:
-        # Mark failure
-        state.mark_step_failed(
-            step="requirements",
-            error=exc,
-            retryable=True,
-        )
-        job_store.save_status(state.to_dict())
-
-        # Emit failure SSE event
-        _safe_emit(
-            state.job_id,
-            {
-                "event": "step_failed",
-                "step": "requirements",
-                "error": state.errors.get("requirements"),
-            },
-        )
-
-        return state
+    return state.complete_step("requirements", output)

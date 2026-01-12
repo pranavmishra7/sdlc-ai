@@ -1,78 +1,64 @@
-import asyncio
+import json
+import re
+from typing import Any, Dict
+
 from app.state.sdlc_state import SDLCState
 from app.agents.sow_agent import run_sow
-from app.storage.job_store import JobStore
-from app.services.sse_manager import sse_manager
 
 
-def _safe_emit(job_id: str, payload: dict):
+def _extract_json_block(text: str) -> Dict[str, Any]:
     """
-    Safely emit SSE event from sync context (Celery-safe).
+    Extracts the FIRST valid JSON object from the LLM output.
+    Raw text is NEVER modified or trimmed.
     """
+
+    # Prefer fenced ```json blocks
+    fence_match = re.search(
+        r"```json\s*(\{[\s\S]*?\})\s*```",
+        text,
+        re.IGNORECASE,
+    )
+    raw_json = fence_match.group(1) if fence_match else None
+
+    # Fallback: first {...} block
+    if raw_json is None:
+        brace_match = re.search(r"(\{[\s\S]*\})", text)
+        raw_json = brace_match.group(1) if brace_match else None
+
+    if raw_json is None:
+        raise ValueError("No JSON object found in SOW output")
+
     try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(sse_manager.publish(job_id, payload))
-    except RuntimeError:
-        # No running event loop (Celery worker)
-        pass
+        return json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in SOW output: {exc}") from exc
 
 
 def sow_node(state: SDLCState) -> SDLCState:
-    job_store = JobStore(state.job_id)
+    """
+    SOW node.
+    Applies schema parsing ONLY here.
+    """
 
-    try:
-        # Mark running
-        state.mark_step_running("sow")
-        job_store.save_status(state.to_dict())
+    # Full accumulated context (intake → requirements → architecture → etc.)
+    context = state.get_context()
 
-        # Execute agent
-        result = run_sow({
-            "intake": state.intake,
-            "scope": state.scope,
-            "requirements": state.requirements,
-            "architecture": state.architecture,
-            "estimation": state.estimation,
-            "risk": state.risk,
-        })
+    # Run agent (may raise; graph will catch)
+    agent_result = run_sow(context)
 
-        # Persist step output
-        job_store.save_step("sow", result)
+    # Expected agent_result:
+    # {
+    #   "raw_output": "<verbatim LLM output>"
+    # }
 
-        # Update state
-        state.sow = result
-        state.mark_step_completed("sow")
-        state.current_step = "completed"   # ✅ FIX
-        job_store.save_status(state.to_dict())
+    raw = agent_result["raw_output"]
 
-        # Emit success SSE event
-        _safe_emit(
-            state.job_id,
-            {
-                "event": "step_completed",
-                "step": "sow",
-                "data": result,
-            },
-        )
+    parsed = _extract_json_block(raw)
 
-        return state
+    output = {
+        "type": "json",
+        "raw": raw,        # 🔒 NEVER altered
+        "parsed": parsed,  # ✅ structured + stable
+    }
 
-    except Exception as exc:
-        # Mark failure (no auto-retry for SOW)
-        state.mark_step_failed(
-            step="sow",
-            error=exc,
-            retryable=False,
-        )
-        job_store.save_status(state.to_dict())
-
-        # Emit failure SSE event
-        _safe_emit(
-            state.job_id,
-            {
-                "event": "step_failed",
-                "step": "sow",
-                "error": state.errors.get("sow"),
-            },
-        )
-
-        return state
+    return state.complete_step("sow", output)

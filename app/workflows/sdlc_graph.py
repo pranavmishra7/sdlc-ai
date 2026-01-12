@@ -1,3 +1,5 @@
+from app.state.sdlc_state import SDLCState
+
 from app.workflows.nodes.intake import intake_node
 from app.workflows.nodes.scope import scope_node
 from app.workflows.nodes.requirements import requirements_node
@@ -5,21 +7,9 @@ from app.workflows.nodes.architecture import architecture_node
 from app.workflows.nodes.estimation import estimation_node
 from app.workflows.nodes.risk import risk_node
 from app.workflows.nodes.sow import sow_node
-from app.storage.job_store import JobStore
-from app.state.sdlc_state import SDLCState
 
 
-SDLC_ORDER = [
-    "intake",
-    "scope",
-    "requirements",
-    "architecture",
-    "estimation",
-    "risk",
-    "sow",
-]
-
-SDLC_NODES = {
+NODE_MAP = {
     "intake": intake_node,
     "scope": scope_node,
     "requirements": requirements_node,
@@ -32,67 +22,32 @@ SDLC_NODES = {
 
 def run_sdlc_workflow(state: SDLCState) -> SDLCState:
     """
-    FINAL state-driven SDLC workflow runner.
+    Executes EXACTLY ONE SDLC step.
 
-    Guarantees:
-    - Executes ONLY ONE step per invocation
-    - Never re-runs completed steps
-    - Correctly marks running/completed
-    - Safe for retries & resume
+    - No looping
+    - No persistence
+    - No retries here
     """
 
-    job_store = JobStore(state.job_id)
-
-    # -------------------------------------------------
-    # Load persisted state (resume-safe)
-    # -------------------------------------------------
-    persisted = job_store.load_status()
-    if persisted:
-        state.current_step = persisted.get("current_step", state.current_step)
-        state.steps = persisted.get("steps", state.steps)
-        state.errors = persisted.get("errors", {})
-        state.retries = persisted.get("retries", state.retries)
-        state.dead_letter = persisted.get("dead_letter")
-
-        # Restore completed outputs
-        for step in SDLC_ORDER:
-            if state.steps.get(step) == "completed":
-                setattr(state, step, job_store.load_step(step))
-
-    # -------------------------------------------------
-    # Stop conditions
-    # -------------------------------------------------
+    # Terminal states
     if state.current_step in ("completed", "dead_letter"):
         return state
 
     step = state.current_step
+    node = NODE_MAP.get(step)
 
-    if step not in SDLC_NODES:
-        raise RuntimeError(f"Invalid current_step: {step}")
+    if not node:
+        raise RuntimeError(f"No node registered for step '{step}'")
 
-    # -------------------------------------------------
-    # Skip already-completed step (advance pointer only)
-    # -------------------------------------------------
-    if state.steps.get(step) == "completed":
-        idx = SDLC_ORDER.index(step) + 1
-        if idx >= len(SDLC_ORDER):
-            state.current_step = "completed"
-        else:
-            state.current_step = SDLC_ORDER[idx]
+    # Mark step running (authoritative)
+    state.start_step(step)
 
-        job_store.save_status(state.to_dict())
+    try:
+        # Node MUST return updated state
+        state = node(state)
         return state
 
-    # -------------------------------------------------
-    # Execute EXACTLY ONE step
-    # -------------------------------------------------
-    node = SDLC_NODES[step]
-
-    state = node(state)
-
-    # -------------------------------------------------
-    # Persist after node execution
-    # -------------------------------------------------
-    job_store.save_status(state.to_dict())
-
-    return state
+    except Exception as exc:
+        # Centralized failure handling
+        state.fail_step(step, exc)
+        return state

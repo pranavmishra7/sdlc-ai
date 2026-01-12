@@ -1,164 +1,146 @@
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Dict, Any, Optional
 
 
 class SDLCState:
-    """
-    SDLC workflow state with:
-    - per-step retry policies
-    - failure handling
-    - dead-letter support
-    """
-
-    SDLC_STEPS = [
-        "intake",
-        "scope",
-        "requirements",
-        "architecture",
-        "estimation",
-        "risk",
-        "sow",
-    ]
-
-    # -------------------------
-    # Per-step retry policy
-    # -------------------------
-    RETRY_POLICY = {
-        "intake": 3,
-        "scope": 2,
-        "requirements": 2,
-        "architecture": 1,
-        "estimation": 1,
-        "risk": 1,
-        "sow": 0,   # never auto-retry
-    }
-
     def __init__(self, job_id: str, product_idea: str):
         self.job_id = job_id
         self.product_idea = product_idea
 
-        # Step outputs
-        self.intake = None
-        self.scope = None
-        self.requirements = None
-        self.architecture = None
-        self.estimation = None
-        self.risk = None
-        self.sow = None
+        self.steps = {
+            "intake": "pending",
+            "scope": "pending",
+            "requirements": "pending",
+            "architecture": "pending",
+            "estimation": "pending",
+            "risk": "pending",
+            "sow": "pending",
+        }
 
-        # Status
         self.current_step = "intake"
-        self.steps = {step: "pending" for step in self.SDLC_STEPS}
 
-        # Errors & retries
-        self.errors: Dict[str, Dict[str, Any]] = {}
-        self.retries: Dict[str, int] = {step: 0 for step in self.SDLC_STEPS}
+        self.outputs: Dict[str, Dict[str, Any]] = {}
+        self.errors: Dict[str, Any] = {}
+        self.retries: Dict[str, int] = {}
+        self.step_started_at: Dict[str, str] = {}
+        self.step_completed_at: Dict[str, str] = {}
 
-        # Dead-letter
         self.dead_letter: Optional[Dict[str, Any]] = None
 
-    # -------------------------
-    # Step transitions
-    # -------------------------
+        # retry policy (can be tuned later)
+        self.retry_policy = {
+            "intake": 0,
+            "scope": 0,
+            "requirements": 1,
+            "architecture": 1,
+            "estimation": 0,
+            "risk": 0,
+            "sow": 0,
+        }
 
-    def mark_step_running(self, step: str):
+    # ----------------------------
+    # Lifecycle helpers
+    # ----------------------------
+
+    def start_step(self, step: str):
         self.steps[step] = "running"
+        self.step_started_at[step] = datetime.utcnow().isoformat()
 
-    def mark_step_completed(self, step: str):
+    def complete_step(self, step: str, output: dict):
         self.steps[step] = "completed"
-        self.errors.pop(step, None)
-        self.retries[step] = 0
+        self.step_completed_at[step] = datetime.utcnow().isoformat()
 
-    def mark_step_failed(
-        self,
-        step: Optional[str] = None,
-        error: Optional[Exception] = None,
-        retryable: bool = True,
-        **kwargs,
-    ):
-        """
-        Mark a step as failed.
-
-        Supports both:
-        - mark_step_failed("intake", exc)
-        - mark_step_failed(step_name="intake", error=exc)
-        """
-
-        step_name = step or kwargs.get("step_name")
-
-        if not step_name:
-            raise ValueError("step or step_name must be provided")
-
-        self.steps[step_name] = "failed"
-        self.errors[step_name] = {
-            "type": type(error).__name__ if error else "UnknownError",
-            "message": str(error) if error else "",
-            "retryable": retryable,
+        # 🔒 raw output is immutable
+        self.outputs[step] = {
+            "type": output.get("type"),
+            "raw": output.get("raw"),
+            "parsed": output.get("parsed"),
         }
-        self.current_step = step_name
 
-    # -------------------------
-    # Retry logic
-    # -------------------------
+        self._advance_step()
 
-    def max_retries_for(self, step: str) -> int:
-        return self.RETRY_POLICY.get(step, 0)
+    def fail_step(self, step: str, exc: Exception):
+        retries = self.retries.get(step, 0) + 1
+        self.retries[step] = retries
 
-    def can_auto_retry(self, step: str) -> bool:
-        if step not in self.errors:
-            return False
-        if not self.errors[step].get("retryable", True):
-            return False
-        return self.retries[step] < self.max_retries_for(step)
-
-    def increment_retry(self, step: str):
-        self.retries[step] += 1
-
-    # -------------------------
-    # Dead-letter
-    # -------------------------
-
-    def mark_dead_letter(self, step: str):
-        self.dead_letter = {
-            "step": step,
-            "error": self.errors.get(step),
-            "failed_at": datetime.utcnow().isoformat(),
+        self.errors[step] = {
+            "message": str(exc),
+            "type": type(exc).__name__,
         }
-        self.current_step = "dead_letter"
 
-    def is_dead_lettered(self) -> bool:
-        return self.dead_letter is not None
+        max_retries = self.retry_policy.get(step, 0)
 
-    def failed_step(self) -> Optional[str]:
-        for step, status in self.steps.items():
-            if status == "failed":
-                return step
-        return None
+        if retries > max_retries:
+            self.steps[step] = "failed"
+            self.dead_letter = {
+                "step": step,
+                "error": self.errors[step],
+                "failed_at": datetime.utcnow().isoformat(),
+            }
+            self.current_step = "dead_letter"
+        else:
+            # retry same step
+            self.steps[step] = "pending"
+            self.current_step = step
 
-    # -------------------------
+    def is_completed(self) -> bool:
+        return all(v == "completed" for v in self.steps.values())
+
+    def _advance_step(self):
+        order = list(self.steps.keys())
+        idx = order.index(self.current_step)
+
+        if idx + 1 < len(order):
+            self.current_step = order[idx + 1]
+        else:
+            self.current_step = "completed"
+
+    # ----------------------------
     # Serialization
-    # -------------------------
+    # ----------------------------
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict:
         return {
             "job_id": self.job_id,
             "product_idea": self.product_idea,
-            "current_step": self.current_step,
             "steps": self.steps,
+            "current_step": self.current_step,
+            "outputs": self.outputs,
             "errors": self.errors,
             "retries": self.retries,
+            "retry_policy": self.retry_policy,
+            "step_started_at": self.step_started_at,
+            "step_completed_at": self.step_completed_at,
             "dead_letter": self.dead_letter,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SDLCState":
-        state = cls(
-            job_id=data["job_id"],
-            product_idea=data.get("product_idea", ""),
-        )
-        state.current_step = data.get("current_step", "intake")
-        state.steps = data.get("steps", state.steps)
+    def from_dict(cls, data: dict) -> "SDLCState":
+        state = cls(data["job_id"], data["product_idea"])
+        state.steps = data["steps"]
+        state.current_step = data["current_step"]
+        state.outputs = data.get("outputs", {})
         state.errors = data.get("errors", {})
-        state.retries = data.get("retries", state.retries)
+        state.retries = data.get("retries", {})
+        state.retry_policy = data.get("retry_policy", state.retry_policy)
+        state.step_started_at = data.get("step_started_at", {})
+        state.step_completed_at = data.get("step_completed_at", {})
         state.dead_letter = data.get("dead_letter")
         return state
+
+    # ----------------------------
+    # Context for agents
+    # ----------------------------
+
+    def get_context(self) -> str:
+        """
+        Build cumulative context for downstream agents.
+        """
+        parts = [self.product_idea]
+
+        for step, out in self.outputs.items():
+            raw = out.get("raw")
+            if raw:
+                parts.append(raw)
+
+        return "\n\n".join(parts)

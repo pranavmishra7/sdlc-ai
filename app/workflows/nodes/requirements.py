@@ -1,36 +1,33 @@
-import json
-import re
-from typing import Dict, Any
-
-from app.state.sdlc_state import SDLCState
-from app.agents.requirements_agent import run_requirements
+from app.llm.router import get_llm
+from app.agents.utils import compact
 
 
-def _extract_json_block(text: str) -> Dict[str, Any]:
-    fence = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", text, re.I)
-    raw_json = fence.group(1) if fence else None
+def run_requirements(context: str) -> dict:
+    llm = get_llm()
 
-    if raw_json is None:
-        brace = re.search(r"(\{[\s\S]*\})", text)
-        raw_json = brace.group(1) if brace else None
+    prompt = f"""
+    You are an SDLC requirements analysis agent.
 
-    if raw_json is None:
-        raise ValueError("No JSON object found in requirements output")
+    Based on the context below, derive requirements.
 
-    return json.loads(raw_json)
+    Context:
+    {compact(context)}
 
+    Return STRICT JSON with:
+    - functional_requirements
+    - non_functional_requirements
+    - assumptions
+    """
 
-def requirements_node(state: SDLCState) -> SDLCState:
-    context = state.get_context()
-    agent_result = run_requirements(context)
+    response = llm.generate(prompt)
 
-    raw = agent_result["raw_output"]
-    parsed = _extract_json_block(raw)
+    if response is None:
+        raise RuntimeError("LLM returned None")
+    if not isinstance(response, str):
+        raise TypeError(f"LLM returned non-string response: {type(response)}")
+    if not response.strip():
+        raise RuntimeError("LLM returned empty response")
 
-    output = {
-        "type": "json",
-        "raw": raw,      # 🔒 preserved
-        "parsed": parsed,
+    return {
+        "raw_output": response
     }
-
-    return state.complete_step("requirements", output)

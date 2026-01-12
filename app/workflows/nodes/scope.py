@@ -1,16 +1,33 @@
-from app.state.sdlc_state import SDLCState
-from app.agents.scope_agent import run_scope
+from app.llm.router import get_llm
+from app.agents.utils import compact
 
 
-def scope_node(state: SDLCState) -> SDLCState:
-    context = state.get_context()
+def run_scope(context: str) -> dict:
+    llm = get_llm()
 
-    agent_result = run_scope(context)
+    prompt = f"""
+    You are an SDLC scope definition agent.
 
-    output = {
-        "type": "text",
-        "raw": agent_result["raw_output"],
-        "parsed": None,
+    Based on the context below, define project scope.
+
+    Context:
+    {compact(context)}
+
+    Return STRICT JSON with:
+    - in_scope
+    - out_of_scope
+    - assumptions
+    """
+
+    response = llm.generate(prompt)
+
+    if response is None:
+        raise RuntimeError("LLM returned None")
+    if not isinstance(response, str):
+        raise TypeError(f"LLM returned non-string response: {type(response)}")
+    if not response.strip():
+        raise RuntimeError("LLM returned empty response")
+
+    return {
+        "raw_output": response
     }
-
-    return state.complete_step("scope", output)

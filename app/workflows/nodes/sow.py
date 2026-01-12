@@ -1,36 +1,37 @@
-import json
-import re
-from typing import Dict, Any
-
-from app.state.sdlc_state import SDLCState
-from app.agents.sow_agent import run_sow
+from app.llm.router import get_llm
+from app.agents.utils import compact
 
 
-def _extract_json_block(text: str) -> Dict[str, Any]:
-    fence = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", text, re.I)
-    raw_json = fence.group(1) if fence else None
+def run_sow(context: str) -> dict:
+    llm = get_llm()
 
-    if raw_json is None:
-        brace = re.search(r"(\{[\s\S]*\})", text)
-        raw_json = brace.group(1) if brace else None
+    prompt = f"""
+    You are an SDLC Statement of Work (SOW) generation agent.
 
-    if raw_json is None:
-        raise ValueError("No JSON object found in SOW output")
+    Using the full context below, generate a professional SOW.
 
-    return json.loads(raw_json)
+    Context:
+    {compact(context)}
 
+    Return STRICT JSON with:
+    - project_overview
+    - scope_of_work
+    - deliverables
+    - milestones
+    - timeline
+    - assumptions
+    - exclusions
+    """
 
-def sow_node(state: SDLCState) -> SDLCState:
-    context = state.get_context()
-    agent_result = run_sow(context)
+    response = llm.generate(prompt)
 
-    raw = agent_result["raw_output"]
-    parsed = _extract_json_block(raw)
+    if response is None:
+        raise RuntimeError("LLM returned None")
+    if not isinstance(response, str):
+        raise TypeError(f"LLM returned non-string response: {type(response)}")
+    if not response.strip():
+        raise RuntimeError("LLM returned empty response")
 
-    output = {
-        "type": "json",
-        "raw": raw,      # 🔒 preserved
-        "parsed": parsed,
+    return {
+        "raw_output": response
     }
-
-    return state.complete_step("sow", output)

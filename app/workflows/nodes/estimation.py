@@ -1,16 +1,34 @@
-from app.state.sdlc_state import SDLCState
-from app.agents.estimation_agent import run_estimation
+from app.llm.router import get_llm
+from app.agents.utils import compact
 
 
-def estimation_node(state: SDLCState) -> SDLCState:
-    context = state.get_context()
+def run_estimation(context: str) -> dict:
+    llm = get_llm()
 
-    agent_result = run_estimation(context)
+    prompt = f"""
+    You are an SDLC project estimation agent.
 
-    output = {
-        "type": "text",
-        "raw": agent_result["raw_output"],
-        "parsed": None,
+    Based on the context below, provide effort and timeline estimation.
+
+    Context:
+    {compact(context)}
+
+    Return STRICT JSON with:
+    - effort_breakdown
+    - estimated_timeline
+    - assumptions
+    - risks
+    """
+
+    response = llm.generate(prompt)
+
+    if response is None:
+        raise RuntimeError("LLM returned None")
+    if not isinstance(response, str):
+        raise TypeError(f"LLM returned non-string response: {type(response)}")
+    if not response.strip():
+        raise RuntimeError("LLM returned empty response")
+
+    return {
+        "raw_output": response
     }
-
-    return state.complete_step("estimation", output)

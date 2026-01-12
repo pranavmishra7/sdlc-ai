@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Dict, Any, Optional
-from typing import Exception as ExceptionType
 
 class SDLCState:
     def __init__(self, job_id: str, product_idea: str):
@@ -59,7 +58,7 @@ class SDLCState:
         self._advance_step()
         return self
 
-    def fail_step(self, step: str, error: ExceptionType):
+    def fail_step(self, step: str, error: Exception):
         """
         Mark a step as failed and dead-letter the workflow if retries are exhausted.
         """

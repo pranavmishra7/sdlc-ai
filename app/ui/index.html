@@ -198,15 +198,15 @@
     }
 
     function renderStep(step) {
-      const body = document.getElementById(`body-${step}`);
-      const raw = cache[step]?.data?.output?.raw_output;
+  const body = document.getElementById(`body-${step}`);
+  const raw = cache[step]?.data?.output?.raw_output;
 
-      if (!raw) {
-        body.innerHTML = "<div class='section'>No output</div>";
-        return;
-      }
+  if (!raw) {
+    body.innerHTML = "<div class='section'>No output</div>";
+    return;
+  }
 
-      const meta = `
+  const meta = `
     <div class="meta">
       Status: ${cache[step].data.status}<br>
       Started: ${cache[step].data.started_at}<br>
@@ -214,35 +214,29 @@
     </div>
   `;
 
-      // Intake = special human rendering
-      if (step === "intake") {
-        body.innerHTML = meta + renderHumanReadable(raw);
-        return;
-      }
+  // Intake: structured human rendering
+  if (step === "intake") {
+    body.innerHTML = meta + renderHumanReadable(raw);
+    return;
+  }
 
-      // Try JSON extraction
-      const extractedJson = extractJsonFromText(raw);
-      if (extractedJson) {
-        const pretty = prettyPrintJson(extractedJson);
-        if (pretty) {
-          body.innerHTML = `
-        ${meta}
-        <div class="section">
-          <pre style="white-space: pre-wrap;">${pretty}</pre>
-        </div>
-      `;
-          return;
-        }
-      }
+  // Normalize text
+  const cleaned = stripMarkdownFences(raw);
 
-      // Fallback: clean readable text
-      body.innerHTML = `
+  // Try JSON (non-fatal)
+  const prettyJson = safePrettyJson(cleaned);
+
+  // Always render via textContent-equivalent
+  const content = prettyJson ?? cleaned;
+
+  body.innerHTML = `
     ${meta}
     <div class="section">
-      <pre style="white-space: pre-wrap;">${raw}</pre>
+      <pre style="white-space: pre-wrap;">${escapeHtml(content)}</pre>
     </div>
   `;
-    }
+}
+
 
 
 
@@ -353,8 +347,27 @@
       }
     }
 
+    function stripMarkdownFences(text) {
+      return text
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+    }
 
+    function safePrettyJson(text) {
+      try {
+        const obj = JSON.parse(text);
+        return JSON.stringify(obj, null, 2);
+      } catch {
+        return null;
+      }
+    }
 
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.innerText = text;
+      return div.innerHTML;
+    }
 
   </script>
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Dict, Any, Optional
-
+from typing import Exception as ExceptionType
 
 class SDLCState:
     def __init__(self, job_id: str, product_idea: str):
@@ -59,31 +59,37 @@ class SDLCState:
         self._advance_step()
         return self
 
+    def fail_step(self, step: str, error: ExceptionType):
+        """
+        Mark a step as failed and dead-letter the workflow if retries are exhausted.
+        """
 
-    def fail_step(self, step: str, exc: Exception):
-        retries = self.retries.get(step, 0) + 1
-        self.retries[step] = retries
-
-        self.errors[step] = {
-            "message": str(exc),
-            "type": type(exc).__name__,
+        error_payload = {
+            "message": str(error),
+            "type": error.__class__.__name__,
         }
 
-        max_retries = self.retry_policy.get(step, 0)
+        # mark step failed
+        self.steps[step] = "failed"
+        self.errors[step] = error_payload
+        self.step_completed_at[step] = datetime.utcnow().isoformat()
 
-        if retries > max_retries:
-            self.steps[step] = "failed"
-            self.dead_letter = {
-                "step": step,
-                "error": self.errors[step],
-                "failed_at": datetime.utcnow().isoformat(),
-            }
-            self.current_step = "dead_letter"
-        else:
-            # retry same step
+        # increment retry count
+        self.retries[step] = self.retries.get(step, 0) + 1
+
+        # retry if allowed
+        if self.retries[step] <= self.retry_policy.get(step, 0):
             self.steps[step] = "pending"
             self.current_step = step
+            return
 
+        # dead-letter workflow
+        self.current_step = "dead_letter"
+        self.dead_letter = {
+            "step": step,
+            "error": error_payload,
+            "failed_at": datetime.utcnow().isoformat(),
+        }
     def is_completed(self) -> bool:
         return all(v == "completed" for v in self.steps.values())
 

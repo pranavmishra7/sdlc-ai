@@ -214,22 +214,36 @@
     </div>
   `;
 
-      // Intake gets special structured rendering
+      // Intake = special human rendering
       if (step === "intake") {
         body.innerHTML = meta + renderHumanReadable(raw);
         return;
       }
 
-      // All other steps: show clean readable text
+      // Try JSON extraction
+      const extractedJson = extractJsonFromText(raw);
+      if (extractedJson) {
+        const pretty = prettyPrintJson(extractedJson);
+        if (pretty) {
+          body.innerHTML = `
+        ${meta}
+        <div class="section">
+          <pre style="white-space: pre-wrap;">${pretty}</pre>
+        </div>
+      `;
+          return;
+        }
+      }
+
+      // Fallback: clean readable text
       body.innerHTML = `
     ${meta}
     <div class="section">
-      <pre style="white-space: pre-wrap; color:#ddd; font-family: inherit;">
-${raw}
-      </pre>
+      <pre style="white-space: pre-wrap;">${raw}</pre>
     </div>
   `;
     }
+
 
 
     /* ---------------- HUMAN OUTPUT ---------------- */
@@ -320,6 +334,25 @@ ${raw}
       </div>` : ""}
   `;
     }
+
+    function extractJsonFromText(text) {
+      // Remove ```json ... ``` or ``` ... ```
+      const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      if (fenced) {
+        return fenced[1].trim();
+      }
+      return null;
+    }
+
+    function prettyPrintJson(jsonText) {
+      try {
+        const obj = JSON.parse(jsonText);
+        return JSON.stringify(obj, null, 2);
+      } catch {
+        return null;
+      }
+    }
+
 
 
 

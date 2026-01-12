@@ -50,7 +50,6 @@ class SDLCState:
         self.steps[step] = "completed"
         self.step_completed_at[step] = datetime.utcnow().isoformat()
 
-        # 🔒 raw output is immutable
         self.outputs[step] = {
             "type": output.get("type"),
             "raw": output.get("raw"),
@@ -58,6 +57,8 @@ class SDLCState:
         }
 
         self._advance_step()
+        return self
+
 
     def fail_step(self, step: str, exc: Exception):
         retries = self.retries.get(step, 0) + 1

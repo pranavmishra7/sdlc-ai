@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+
 class SDLCState:
     def __init__(self, job_id: str, product_idea: str):
         self.job_id = job_id
@@ -26,7 +27,7 @@ class SDLCState:
 
         self.dead_letter: Optional[Dict[str, Any]] = None
 
-        # retry policy (can be tuned later)
+        # retry policy (tunable)
         self.retry_policy = {
             "intake": 0,
             "scope": 0,
@@ -44,18 +45,26 @@ class SDLCState:
     def start_step(self, step: str):
         self.steps[step] = "running"
         self.step_started_at[step] = datetime.utcnow().isoformat()
+        self.current_step = step
+        return self
 
-    def complete_step(self, step: str, output: dict):
+    def complete_step(
+        self,
+        step: str,
+        raw_output: Optional[str] = None,
+        parsed_output: Optional[dict] = None,
+        output_type: Optional[str] = None,
+    ):
         self.steps[step] = "completed"
         self.step_completed_at[step] = datetime.utcnow().isoformat()
 
         self.outputs[step] = {
-            "type": output.get("type"),
-            "raw": output.get("raw"),
-            "parsed": output.get("parsed"),
+            "type": output_type,
+            "raw": raw_output,
+            "parsed": parsed_output,
         }
 
-        self._advance_step()
+        self._advance_step(step)
         return self
 
     def fail_step(self, step: str, error: Exception):
@@ -68,33 +77,33 @@ class SDLCState:
             "type": error.__class__.__name__,
         }
 
-        # mark step failed
         self.steps[step] = "failed"
         self.errors[step] = error_payload
         self.step_completed_at[step] = datetime.utcnow().isoformat()
 
-        # increment retry count
         self.retries[step] = self.retries.get(step, 0) + 1
 
         # retry if allowed
         if self.retries[step] <= self.retry_policy.get(step, 0):
             self.steps[step] = "pending"
             self.current_step = step
-            return
+            return self
 
-        # dead-letter workflow
+        # dead-letter
         self.current_step = "dead_letter"
         self.dead_letter = {
             "step": step,
             "error": error_payload,
             "failed_at": datetime.utcnow().isoformat(),
         }
+        return self
+
     def is_completed(self) -> bool:
         return all(v == "completed" for v in self.steps.values())
 
-    def _advance_step(self):
+    def _advance_step(self, completed_step: str):
         order = list(self.steps.keys())
-        idx = order.index(self.current_step)
+        idx = order.index(completed_step)
 
         if idx + 1 < len(order):
             self.current_step = order[idx + 1]
@@ -123,8 +132,8 @@ class SDLCState:
     @classmethod
     def from_dict(cls, data: dict) -> "SDLCState":
         state = cls(data["job_id"], data["product_idea"])
-        state.steps = data["steps"]
-        state.current_step = data["current_step"]
+        state.steps = data.get("steps", state.steps)
+        state.current_step = data.get("current_step", "intake")
         state.outputs = data.get("outputs", {})
         state.errors = data.get("errors", {})
         state.retries = data.get("retries", {})
@@ -144,9 +153,9 @@ class SDLCState:
         """
         parts = [self.product_idea]
 
-        for step, out in self.outputs.items():
-            raw = out.get("raw")
-            if raw:
-                parts.append(raw)
+        for step in self.steps:
+            out = self.outputs.get(step)
+            if out and out.get("raw"):
+                parts.append(out["raw"])
 
         return "\n\n".join(parts)

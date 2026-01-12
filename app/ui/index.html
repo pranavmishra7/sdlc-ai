@@ -197,47 +197,48 @@
         });
     }
 
+    /*render steps*/
+
     function renderStep(step) {
-  const body = document.getElementById(`body-${step}`);
-  const raw = cache[step]?.data?.output?.raw_output;
+      const body = document.getElementById(`body-${step}`);
+      const stepData = cache[step]?.data;
 
-  if (!raw) {
-    body.innerHTML = "<div class='section'>No output</div>";
-    return;
-  }
+      const raw = stepData?.raw_output;
+      const started = stepData?.started_at;
+      const completed = stepData?.completed_at;
+      const status = cache[step]?.status;
 
-  const meta = `
+      if (!raw) {
+        body.innerHTML = "<div class='section'>No output</div>";
+        return;
+      }
+
+      const meta = `
     <div class="meta">
-      Status: ${cache[step].data.status}<br>
-      Started: ${cache[step].data.started_at}<br>
-      Completed: ${cache[step].data.completed_at}
+      Status: ${status}<br>
+      Started: ${started}<br>
+      Completed: ${completed}
     </div>
   `;
 
-  // Intake: structured human rendering
-  if (step === "intake") {
-    body.innerHTML = meta + renderHumanReadable(raw);
-    return;
-  }
+      // Intake → human readable
+      if (step === "intake") {
+        body.innerHTML = meta + renderHumanReadable(raw);
+        return;
+      }
 
-  // Normalize text
-  const cleaned = stripMarkdownFences(raw);
+      // Other steps → safe text / JSON render
+      const cleaned = stripMarkdownFences(raw);
+      const prettyJson = safePrettyJson(cleaned);
+      const content = prettyJson ?? cleaned;
 
-  // Try JSON (non-fatal)
-  const prettyJson = safePrettyJson(cleaned);
-
-  // Always render via textContent-equivalent
-  const content = prettyJson ?? cleaned;
-
-  body.innerHTML = `
+      body.innerHTML = `
     ${meta}
     <div class="section">
       <pre style="white-space: pre-wrap;">${escapeHtml(content)}</pre>
     </div>
   `;
-}
-
-
+    }
 
 
     /* ---------------- HUMAN OUTPUT ---------------- */

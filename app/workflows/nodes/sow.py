@@ -1,37 +1,23 @@
-from app.llm.router import get_llm
-from app.agents.utils import compact
+from app.state.sdlc_state import SDLCState
+from app.agents.sow_agent import run_sow
 
 
-def run_sow(context: str) -> dict:
-    llm = get_llm()
+def sow_node(state: SDLCState) -> SDLCState:
+    step = "sow"
 
-    prompt = f"""
-    You are an SDLC Statement of Work (SOW) generation agent.
+    try:
+        state.start_step(step)
 
-    Using the full context below, generate a professional SOW.
+        context = state.build_context()
+        result = run_sow(context)
 
-    Context:
-    {compact(context)}
+        state.complete_step(
+            step=step,
+            raw_output=result["raw_output"],
+        )
 
-    Return STRICT JSON with:
-    - project_overview
-    - scope_of_work
-    - deliverables
-    - milestones
-    - timeline
-    - assumptions
-    - exclusions
-    """
+        return state
 
-    response = llm.generate(prompt)
-
-    if response is None:
-        raise RuntimeError("LLM returned None")
-    if not isinstance(response, str):
-        raise TypeError(f"LLM returned non-string response: {type(response)}")
-    if not response.strip():
-        raise RuntimeError("LLM returned empty response")
-
-    return {
-        "raw_output": response
-    }
+    except Exception as e:
+        state.fail_step(step=step, error=e)
+        return state

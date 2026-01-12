@@ -1,33 +1,22 @@
-from app.llm.router import get_llm
-from app.agents.utils import compact
+from app.state.sdlc_state import SDLCState
+from app.agents.intake_agent import run_intake
 
 
-def run_intake(product_idea: str) -> dict:
-    if not product_idea or not product_idea.strip():
-        raise ValueError("Product idea is empty")
+def intake_node(state: SDLCState) -> SDLCState:
+    step = "intake"
 
-    llm = get_llm()
+    try:
+        state.start_step(step)
 
-    prompt = f"""
-    Validate and structure this product idea.
-    Return STRICT JSON with:
-    - problem
-    - target_users
-    - assumptions
+        result = run_intake(state.product_idea)
 
-    Product Idea:
-    {compact(product_idea)}
-    """
+        state.complete_step(
+            step=step,
+            raw_output=result["raw_output"],
+        )
 
-    response = llm.generate(prompt)
+        return state
 
-    if response is None:
-        raise RuntimeError("LLM returned None")
-    if not isinstance(response, str):
-        raise TypeError(f"LLM returned non-string response: {type(response)}")
-    if not response.strip():
-        raise RuntimeError("LLM returned empty response")
-
-    return {
-        "raw_output": response
-    }
+    except Exception as e:
+        state.fail_step(step=step, error=e)
+        return state

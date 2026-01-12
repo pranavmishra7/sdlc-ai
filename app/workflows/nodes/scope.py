@@ -1,33 +1,23 @@
-from app.llm.router import get_llm
-from app.agents.utils import compact
+from app.state.sdlc_state import SDLCState
+from app.agents.scope_agent import run_scope
 
 
-def run_scope(context: str) -> dict:
-    llm = get_llm()
+def scope_node(state: SDLCState) -> SDLCState:
+    step = "scope"
 
-    prompt = f"""
-    You are an SDLC scope definition agent.
+    try:
+        state.start_step(step)
 
-    Based on the context below, define project scope.
+        context = state.build_context()
+        result = run_scope(context)
 
-    Context:
-    {compact(context)}
+        state.complete_step(
+            step=step,
+            raw_output=result["raw_output"],
+        )
 
-    Return STRICT JSON with:
-    - in_scope
-    - out_of_scope
-    - assumptions
-    """
+        return state
 
-    response = llm.generate(prompt)
-
-    if response is None:
-        raise RuntimeError("LLM returned None")
-    if not isinstance(response, str):
-        raise TypeError(f"LLM returned non-string response: {type(response)}")
-    if not response.strip():
-        raise RuntimeError("LLM returned empty response")
-
-    return {
-        "raw_output": response
-    }
+    except Exception as e:
+        state.fail_step(step=step, error=e)
+        return state

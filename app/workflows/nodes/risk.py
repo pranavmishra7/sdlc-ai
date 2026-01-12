@@ -1,34 +1,23 @@
-from app.llm.router import get_llm
-from app.agents.utils import compact
+from app.state.sdlc_state import SDLCState
+from app.agents.risk_agent import run_risk
 
 
-def run_risk(context: str) -> dict:
-    llm = get_llm()
+def risk_node(state: SDLCState) -> SDLCState:
+    step = "risk"
 
-    prompt = f"""
-    You are an SDLC risk analysis agent.
+    try:
+        state.start_step(step)
 
-    Based on the context below, identify project risks.
+        context = state.build_context()
+        result = run_risk(context)
 
-    Context:
-    {compact(context)}
+        state.complete_step(
+            step=step,
+            raw_output=result["raw_output"],
+        )
 
-    Return STRICT JSON with:
-    - technical_risks
-    - delivery_risks
-    - operational_risks
-    - mitigation_strategies
-    """
+        return state
 
-    response = llm.generate(prompt)
-
-    if response is None:
-        raise RuntimeError("LLM returned None")
-    if not isinstance(response, str):
-        raise TypeError(f"LLM returned non-string response: {type(response)}")
-    if not response.strip():
-        raise RuntimeError("LLM returned empty response")
-
-    return {
-        "raw_output": response
-    }
+    except Exception as e:
+        state.fail_step(step=step, error=e)
+        return state

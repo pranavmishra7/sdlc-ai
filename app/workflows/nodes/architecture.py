@@ -1,35 +1,23 @@
-from app.llm.router import get_llm
-from app.agents.utils import compact
+from app.state.sdlc_state import SDLCState
+from app.agents.architecture_agent import run_architecture
 
 
-def run_architecture(context: str) -> dict:
-    llm = get_llm()
+def architecture_node(state: SDLCState) -> SDLCState:
+    step = "architecture"
 
-    prompt = f"""
-    You are an SDLC system architecture agent.
+    try:
+        state.start_step(step)
 
-    Based on the context below, design a high-level architecture.
+        context = state.build_context()
+        result = run_architecture(context)
 
-    Context:
-    {compact(context)}
+        state.complete_step(
+            step=step,
+            raw_output=result["raw_output"],
+        )
 
-    Return STRICT JSON with:
-    - architecture_overview
-    - major_components
-    - data_flow
-    - technology_choices
-    - assumptions
-    """
+        return state
 
-    response = llm.generate(prompt)
-
-    if response is None:
-        raise RuntimeError("LLM returned None")
-    if not isinstance(response, str):
-        raise TypeError(f"LLM returned non-string response: {type(response)}")
-    if not response.strip():
-        raise RuntimeError("LLM returned empty response")
-
-    return {
-        "raw_output": response
-    }
+    except Exception as e:
+        state.fail_step(step=step, error=e)
+        return state

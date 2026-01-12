@@ -47,7 +47,7 @@ def start_or_resume(payload: dict):
 
 
 # -------------------------------------------------
-# Job Status (UI)
+# Job Status (UI polling)
 # -------------------------------------------------
 @router.get("/{job_id}/status")
 def get_job_status(job_id: str):
@@ -65,17 +65,26 @@ def get_job_status(job_id: str):
 def get_step(job_id: str, step: str):
     store = JobStore(job_id)
     status = store.load_status()
+
     if status is None:
         raise HTTPException(404, "Job not found")
 
     if step not in status["steps"]:
         raise HTTPException(404, "Step not found")
 
+    output = status.get("outputs", {}).get(step)
+
     return {
         "step": step,
         "status": status["steps"][step],
-        "data": store.load_step(step),
-        "error": status["errors"].get(step),
+        "data": {
+            # 🔑 UI-compatible shape
+            "raw_output": output.get("raw") if output else None,
+            "parsed_output": output.get("parsed") if output else None,
+            "started_at": status.get("step_started_at", {}).get(step),
+            "completed_at": status.get("step_completed_at", {}).get(step),
+        },
+        "error": status.get("errors", {}).get(step),
     }
 
 
@@ -111,11 +120,12 @@ def reset_dead_letter_job(job_id: str):
 
     state = SDLCState.from_dict(status)
 
-    if not state.is_dead_lettered():
+    if not state.dead_letter:
         raise HTTPException(400, "Job is not dead-lettered")
 
     failed_step = state.dead_letter["step"]
 
+    # Reset state
     state.dead_letter = None
     state.steps[failed_step] = "pending"
     state.errors.pop(failed_step, None)

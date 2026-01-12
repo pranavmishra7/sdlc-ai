@@ -3,30 +3,27 @@ from app.agents.utils import compact
 
 
 def run_scope(context: str) -> dict:
+    if not context or not context.strip():
+        raise ValueError("Context is empty for scope")
+
     llm = get_llm()
 
     prompt = f"""
-    You are an SDLC scope definition agent.
+Define the project scope based on the following context.
 
-    Based on the context below, define project scope.
+Return a clear human-readable response covering:
+- In Scope
+- Out of Scope
+- Assumptions
 
-    Context:
-    {compact(context)}
-
-    Return STRICT JSON with:
-    - in_scope
-    - out_of_scope
-    - assumptions
-    """
+Context:
+{compact(context)}
+"""
 
     response = llm.generate(prompt)
 
-    if response is None:
-        raise RuntimeError("LLM returned None")
-    if not isinstance(response, str):
-        raise TypeError(f"LLM returned non-string response: {type(response)}")
-    if not response.strip():
-        raise RuntimeError("LLM returned empty response")
+    if not response or not isinstance(response, str):
+        raise RuntimeError("LLM returned invalid scope response")
 
     return {
         "raw_output": response

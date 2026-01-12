@@ -159,3 +159,9 @@ class SDLCState:
                 parts.append(out["raw"])
 
         return "\n\n".join(parts)
+
+    def build_context(self) -> str:
+        """
+        Backward-compatible alias used by workflow nodes.
+        """
+        return self.get_context()

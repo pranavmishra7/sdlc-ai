@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from app.state.sdlc_state import SDLCState
 from app.storage.job_store import JobStore
-from app.workers.tasks import run_sdlc_job
+from app.workers.celery_worker import celery_app
 from app.services.sse_manager import sse_manager
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -24,7 +24,11 @@ def start_or_resume(payload: dict):
     if job_id:
         if JobStore(job_id).load_status() is None:
             raise HTTPException(404, "Job not found")
-        run_sdlc_job.delay(job_id)
+
+        celery_app.send_task(
+            "app.workers.tasks.run_sdlc_job",
+            args=[job_id],
+        )
         return {"job_id": job_id, "message": "Workflow resumed"}
 
     if not product_idea:
@@ -33,13 +37,17 @@ def start_or_resume(payload: dict):
     job_id = str(uuid4())
     state = SDLCState(job_id, product_idea)
     JobStore(job_id).save_status(state.to_dict())
-    run_sdlc_job.delay(job_id)
+
+    celery_app.send_task(
+        "app.workers.tasks.run_sdlc_job",
+        args=[job_id],
+    )
 
     return {"job_id": job_id, "message": "Workflow started"}
 
 
 # -------------------------------------------------
-# Job Status (UI uses this)
+# Job Status (UI)
 # -------------------------------------------------
 @router.get("/{job_id}/status")
 def get_job_status(job_id: str):
@@ -48,6 +56,27 @@ def get_job_status(job_id: str):
     if status is None:
         raise HTTPException(404, "Job not found")
     return status
+
+
+# -------------------------------------------------
+# Step Output (UI expand)
+# -------------------------------------------------
+@router.get("/{job_id}/steps/{step}")
+def get_step(job_id: str, step: str):
+    store = JobStore(job_id)
+    status = store.load_status()
+    if status is None:
+        raise HTTPException(404, "Job not found")
+
+    if step not in status["steps"]:
+        raise HTTPException(404, "Step not found")
+
+    return {
+        "step": step,
+        "status": status["steps"][step],
+        "data": store.load_step(step),
+        "error": status["errors"].get(step),
+    }
 
 
 # -------------------------------------------------
@@ -102,7 +131,10 @@ def reset_dead_letter_job(job_id: str):
         )
     )
 
-    run_sdlc_job.delay(job_id)
+    celery_app.send_task(
+        "app.workers.tasks.run_sdlc_job",
+        args=[job_id],
+    )
 
     return {"job_id": job_id, "message": "Job reset and resumed"}
 
@@ -128,23 +160,3 @@ async def stream_events(job_id: str, request: Request):
             sse_manager.unregister(job_id, queue)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
-
-
-@router.get("/{job_id}/steps/{step}")
-def get_step(job_id: str, step: str):
-    store = JobStore(job_id)
-    status = store.load_status()
-    if status is None:
-        raise HTTPException(404, "Job not found")
-
-    if step not in status["steps"]:
-        raise HTTPException(404, "Step not found")
-
-    step_data = store.load_step(step)
-
-    return {
-        "step": step,
-        "status": status["steps"][step],
-        "data": step_data,
-        "error": status["errors"].get(step),
-    }

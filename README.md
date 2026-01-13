@@ -43,8 +43,10 @@ sudo apt install -y \
   xz-utils tk-dev ca-certificates curl
 
  ## after restarting vm 
+ source venv/bin/activate
   pkill -f celery
   redis run
   ollama serve
   ollama run llama3.2:3b "warmup"
+  celery -A app.workers.celery_worker.celery_app worker -l info
   uvicorn app.main:app --host 0.0.0.0 --port 8000

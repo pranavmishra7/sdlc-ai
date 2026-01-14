@@ -1,0 +1,1 @@
+from app.db.models.refresh_token import RefreshToken

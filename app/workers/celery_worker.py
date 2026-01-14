@@ -1,22 +1,17 @@
+# app/workers/celery_worker.py
 import os
 from celery import Celery
-
-# -------------------------------------------------
-# Celery Configuration
-# -------------------------------------------------
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 celery_app = Celery(
     "sdlc_worker",
+    include=["app.workers.tasks"],
     broker=REDIS_URL,
     backend=REDIS_URL,
 )
 
-# -------------------------------------------------
-# Celery Settings
-# -------------------------------------------------
-
+# sensible defaults
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
@@ -26,11 +21,3 @@ celery_app.conf.update(
     task_track_started=True,
     worker_prefetch_multiplier=1,
 )
-
-# -------------------------------------------------
-# Auto-discover Tasks
-# -------------------------------------------------
-
-celery_app.autodiscover_tasks([
-    "app.workers"
-])

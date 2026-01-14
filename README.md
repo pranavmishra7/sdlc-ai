@@ -43,7 +43,7 @@ sudo apt install -y \
   xz-utils tk-dev ca-certificates curl
 
  ## after restarting vm 
- source venv/bin/activate
+ source .venv/bin/activate
   pkill -f celery
   redis run
   ollama serve

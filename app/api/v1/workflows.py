@@ -1,8 +1,9 @@
+# app/api/v1/workflows.py
 import asyncio
 import json
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 
 from app.state.sdlc_state import SDLCState
@@ -10,14 +11,17 @@ from app.storage.job_store import JobStore
 from app.workers.celery_worker import celery_app
 from app.services.sse_manager import sse_manager
 
+from sqlalchemy.orm import Session
+from app.db.session import get_db
+from app.db.models.sdlc_job import SDLCJob
+
+from app.api.deps import get_current_user
+
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
 
-# -------------------------------------------------
-# Start / Resume
-# -------------------------------------------------
 @router.post("/start")
-def start_or_resume(payload: dict):
+def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
     product_idea = payload.get("product_idea")
     job_id = payload.get("job_id")
 
@@ -25,9 +29,11 @@ def start_or_resume(payload: dict):
         if JobStore(job_id).load_status() is None:
             raise HTTPException(404, "Job not found")
 
+        # pass tenant_id explicitly to worker
         celery_app.send_task(
             "app.workers.tasks.run_sdlc_job",
             args=[job_id],
+            kwargs={"tenant_id": user["tenant_id"]},
         )
         return {"job_id": job_id, "message": "Workflow resumed"}
 
@@ -41,14 +47,12 @@ def start_or_resume(payload: dict):
     celery_app.send_task(
         "app.workers.tasks.run_sdlc_job",
         args=[job_id],
+        kwargs={"tenant_id": user["tenant_id"]},
     )
 
     return {"job_id": job_id, "message": "Workflow started"}
 
 
-# -------------------------------------------------
-# Job Status (UI polling)
-# -------------------------------------------------
 @router.get("/{job_id}/status")
 def get_job_status(job_id: str):
     store = JobStore(job_id)
@@ -58,9 +62,6 @@ def get_job_status(job_id: str):
     return status
 
 
-# -------------------------------------------------
-# Step Output (UI expand)
-# -------------------------------------------------
 @router.get("/{job_id}/steps/{step}")
 def get_step(job_id: str, step: str):
     store = JobStore(job_id)
@@ -78,7 +79,6 @@ def get_step(job_id: str, step: str):
         "step": step,
         "status": status["steps"][step],
         "data": {
-            # 🔑 UI-compatible shape
             "raw_output": output.get("raw") if output else None,
             "parsed_output": output.get("parsed") if output else None,
             "started_at": status.get("step_started_at", {}).get(step),
@@ -88,17 +88,11 @@ def get_step(job_id: str, step: str):
     }
 
 
-# -------------------------------------------------
-# Admin: List Dead-letter Jobs
-# -------------------------------------------------
 @router.get("/admin/dead-letter")
 def list_dead_letter_jobs():
     return JobStore.list_dead_letter_jobs()
 
 
-# -------------------------------------------------
-# Admin: Inspect Job
-# -------------------------------------------------
 @router.get("/admin/jobs/{job_id}")
 def inspect_job(job_id: str):
     store = JobStore(job_id)
@@ -108,11 +102,8 @@ def inspect_job(job_id: str):
     return status
 
 
-# -------------------------------------------------
-# Admin: Reset Dead-letter Job
-# -------------------------------------------------
 @router.post("/admin/jobs/{job_id}/reset")
-def reset_dead_letter_job(job_id: str):
+def reset_dead_letter_job(job_id: str, user: dict = Depends(get_current_user)):
     store = JobStore(job_id)
     status = store.load_status()
     if status is None:
@@ -125,7 +116,6 @@ def reset_dead_letter_job(job_id: str):
 
     failed_step = state.dead_letter["step"]
 
-    # Reset state
     state.dead_letter = None
     state.steps[failed_step] = "pending"
     state.errors.pop(failed_step, None)
@@ -144,14 +134,12 @@ def reset_dead_letter_job(job_id: str):
     celery_app.send_task(
         "app.workers.tasks.run_sdlc_job",
         args=[job_id],
+        kwargs={"tenant_id": user["tenant_id"]},
     )
 
     return {"job_id": job_id, "message": "Job reset and resumed"}
 
 
-# -------------------------------------------------
-# SSE Events
-# -------------------------------------------------
 @router.get("/events/{job_id}")
 async def stream_events(job_id: str, request: Request):
     if JobStore(job_id).load_status() is None:
@@ -170,3 +158,9 @@ async def stream_events(job_id: str, request: Request):
             sse_manager.unregister(job_id, queue)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
+
+
+@router.get("/jobs")
+def list_jobs(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    # prefer DB RLS, but add defensive filter as well
+    return db.query(SDLCJob).filter(SDLCJob.tenant_id == user["tenant_id"]).all()

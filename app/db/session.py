@@ -5,8 +5,9 @@ from sqlalchemy.orm import sessionmaker
 from fastapi import Request
 from contextlib import contextmanager
 
-DATABASE_URL = os.environ["DATABASE_URL"]
-
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 # create engine with pool_pre_ping to avoid stale connections
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 

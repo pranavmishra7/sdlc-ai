@@ -1,36 +1,39 @@
-# # app/api/v1/router.py
-# from fastapi import APIRouter
-# from app.api.v1.workflows import router as workflows_router
-# from app.api.v1.health import router as health_router
-# from app.api.v1 import projects
-# from app.api import auth
-
-# api_router = APIRouter()
-
-# api_router.include_router(auth.router)
-# api_router.include_router(projects.router)
-# api_router.include_router(health_router, prefix="/api")
-# api_router.include_router(workflows_router, prefix="/api")
-# api_router.include_router(api_router, prefix="/api")
-# api_router.include_router(projects.router, prefix="/api/v1")
+# app/api/v1/router.py
 
 print("ROUTER: start import")
 
 from fastapi import APIRouter
 print("ROUTER: fastapi imported")
 
-api_router = APIRouter()
-print("ROUTER: router created")
-
-print("ROUTER: importing auth router")
-from app.api.auth import router as auth_router
-print("ROUTER: auth router OK")
-
-print("ROUTER: importing workflows router")
 from app.api.v1.workflows import router as workflows_router
-print("ROUTER: workflows router OK")
+print("ROUTER: workflows router imported")
 
-api_router.include_router(auth_router)
-api_router.include_router(workflows_router)
+from app.api.v1.health import router as health_router
+print("ROUTER: health router imported")
+
+from app.api.v1 import projects
+print("ROUTER: projects router imported")
+
+from app.api import auth
+print("ROUTER: auth router imported")
+
+api_router = APIRouter()
+print("ROUTER: api_router created")
+
+# -----------------------------
+# Route registration
+# -----------------------------
+
+print("ROUTER: including auth router")
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+print("ROUTER: including projects router (v1)")
+api_router.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
+
+print("ROUTER: including health router")
+api_router.include_router(health_router, prefix="/api/health", tags=["health"])
+
+print("ROUTER: including workflows router")
+api_router.include_router(workflows_router, prefix="/api/workflows", tags=["workflows"])
 
 print("ROUTER: end import")

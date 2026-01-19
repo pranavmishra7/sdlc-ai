@@ -1,11 +1,22 @@
 from datetime import datetime
 from typing import Dict, Any, Optional
+from enum import Enum
+
+
+class SDLCJobStatus(str, Enum):
+    RUNNING = "RUNNING"
+    WAITING_APPROVAL = "WAITING_APPROVAL"
+    COMPLETED = "COMPLETED"
+    DEAD_LETTER = "DEAD_LETTER"
 
 
 class SDLCState:
     def __init__(self, job_id: str, product_idea: str):
         self.job_id = job_id
         self.product_idea = product_idea
+
+        # 🔑 JOB STATUS
+        self.job_status: SDLCJobStatus = SDLCJobStatus.RUNNING
 
         self.steps = {
             "intake": "pending",
@@ -25,9 +36,12 @@ class SDLCState:
         self.step_started_at: Dict[str, str] = {}
         self.step_completed_at: Dict[str, str] = {}
 
+        # 🔒 APPROVAL STATE (NEW)
+        # step_name -> PENDING | APPROVED | REJECTED
+        self.step_approvals: Dict[str, str] = {}
+
         self.dead_letter: Optional[Dict[str, Any]] = None
 
-        # retry policy (tunable)
         self.retry_policy = {
             "intake": 0,
             "scope": 0,
@@ -68,10 +82,6 @@ class SDLCState:
         return self
 
     def fail_step(self, step: str, error: Exception):
-        """
-        Mark a step as failed and dead-letter the workflow if retries are exhausted.
-        """
-
         error_payload = {
             "message": str(error),
             "type": error.__class__.__name__,
@@ -80,16 +90,14 @@ class SDLCState:
         self.steps[step] = "failed"
         self.errors[step] = error_payload
         self.step_completed_at[step] = datetime.utcnow().isoformat()
-
         self.retries[step] = self.retries.get(step, 0) + 1
 
-        # retry if allowed
         if self.retries[step] <= self.retry_policy.get(step, 0):
             self.steps[step] = "pending"
             self.current_step = step
             return self
 
-        # dead-letter
+        self.job_status = SDLCJobStatus.DEAD_LETTER
         self.current_step = "dead_letter"
         self.dead_letter = {
             "step": step,
@@ -97,9 +105,6 @@ class SDLCState:
             "failed_at": datetime.utcnow().isoformat(),
         }
         return self
-
-    def is_completed(self) -> bool:
-        return all(v == "completed" for v in self.steps.values())
 
     def _advance_step(self, completed_step: str):
         order = list(self.steps.keys())
@@ -109,6 +114,7 @@ class SDLCState:
             self.current_step = order[idx + 1]
         else:
             self.current_step = "completed"
+            self.job_status = SDLCJobStatus.COMPLETED
 
     # ----------------------------
     # Serialization
@@ -118,6 +124,7 @@ class SDLCState:
         return {
             "job_id": self.job_id,
             "product_idea": self.product_idea,
+            "job_status": self.job_status.value,
             "steps": self.steps,
             "current_step": self.current_step,
             "outputs": self.outputs,
@@ -126,12 +133,16 @@ class SDLCState:
             "retry_policy": self.retry_policy,
             "step_started_at": self.step_started_at,
             "step_completed_at": self.step_completed_at,
+            "step_approvals": self.step_approvals,
             "dead_letter": self.dead_letter,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "SDLCState":
         state = cls(data["job_id"], data["product_idea"])
+        state.job_status = SDLCJobStatus(
+            data.get("job_status", SDLCJobStatus.RUNNING.value)
+        )
         state.steps = data.get("steps", state.steps)
         state.current_step = data.get("current_step", "intake")
         state.outputs = data.get("outputs", {})
@@ -140,28 +151,6 @@ class SDLCState:
         state.retry_policy = data.get("retry_policy", state.retry_policy)
         state.step_started_at = data.get("step_started_at", {})
         state.step_completed_at = data.get("step_completed_at", {})
+        state.step_approvals = data.get("step_approvals", {})
         state.dead_letter = data.get("dead_letter")
         return state
-
-    # ----------------------------
-    # Context for agents
-    # ----------------------------
-
-    def get_context(self) -> str:
-        """
-        Build cumulative context for downstream agents.
-        """
-        parts = [self.product_idea]
-
-        for step in self.steps:
-            out = self.outputs.get(step)
-            if out and out.get("raw"):
-                parts.append(out["raw"])
-
-        return "\n\n".join(parts)
-
-    def build_context(self) -> str:
-        """
-        Backward-compatible alias used by workflow nodes.
-        """
-        return self.get_context()

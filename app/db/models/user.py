@@ -27,6 +27,7 @@ class User(Base):
         UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
     )
     email: Mapped[str] = mapped_column(String, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str | None] = mapped_column(String)
     role: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

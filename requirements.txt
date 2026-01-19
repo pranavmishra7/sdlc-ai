@@ -1,3 +1,17 @@
+# =========================================================
+# HOW TO RUN (from project root)
+# pip install -r requirements.txt
+# 1) Activate venv
+#    source .venv/bin/activate
+#
+# 2) Run API
+#    uvicorn app.main:app --host 0.0.0.0 --port 8000
+#
+# 3) Run Celery worker (separate terminal)
+#    celery -A app.workers.celery_worker worker --loglevel=info
+# =========================================================
+
+
 # -------------------------
 # Web framework
 # -------------------------
@@ -49,8 +63,22 @@ python-dotenv>=1.0
 tenacity>=8.2
 
 # -------------------------
+# Streaming / SSE support
+# -------------------------
+anyio>=4.0
+
+# -------------------------
+# Async utilities (Celery + FastAPI)
+# -------------------------
+asyncio-extra>=1.3.2
+
+# -------------------------
+# UUID / JSON helpers (used implicitly)
+# -------------------------
+orjson>=3.9
+
+# -------------------------
 # Testing
 # -------------------------
 pytest>=9.0
 pytest-env>=1.2
-anyio>=4.0

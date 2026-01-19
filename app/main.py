@@ -14,7 +14,7 @@ app = FastAPI(
     title="SDLC AI Platform",
     version="1.0.0",
 )
-
+print("calling startup")
 @app.on_event("startup")
 async def startup():
     redis = Redis.from_url(
@@ -23,9 +23,11 @@ async def startup():
         decode_responses=True,
     )
     await FastAPILimiter.init(redis)
-
+print("calling middleware TenantContextMiddleware")
 app.add_middleware(TenantContextMiddleware)    
+print("calling middleware TenantMiddleware")
 app.add_middleware(TenantMiddleware)
+print("calling middleware UserContextMiddleware")
 app.add_middleware(UserContextMiddleware)
 
 
@@ -44,12 +46,13 @@ app.include_router(
 # -------------------------------------------------
 
 # Serve static UI files
+print("mounting static files")
 app.mount(
     "/ui",
     StaticFiles(directory="app/ui", html=True),
     name="ui",
 )
-
+print("mounted static files")
 
 # Friendly admin entrypoint
 @app.get("/admin", include_in_schema=False)

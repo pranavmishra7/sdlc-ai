@@ -7,7 +7,6 @@ from fastapi.responses import RedirectResponse
 from app.api.v1.router import api_router
 from fastapi_limiter import FastAPILimiter
 from redis.asyncio import Redis
-from app.middleware.tenant_context import TenantContextMiddleware
 from app.api.v1 import projects
 
 app = FastAPI(
@@ -23,8 +22,7 @@ async def startup():
         decode_responses=True,
     )
     await FastAPILimiter.init(redis)
-print("calling middleware TenantContextMiddleware")
-app.add_middleware(TenantContextMiddleware)    
+print("calling middleware TenantContextMiddleware")  
 print("calling middleware TenantMiddleware")
 app.add_middleware(TenantMiddleware)
 print("calling middleware UserContextMiddleware")

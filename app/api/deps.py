@@ -1,40 +1,39 @@
 # app/api/deps.py
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
-from sqlalchemy import text
 from sqlalchemy.orm import Session
+
 from app.core.jwt import decode_token
 from app.db.session import SessionLocal
 from app.db.models.user import User, UserStatus
-from sqlalchemy import text
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-def get_db(request: Request):
+# ------------------------------------------------------------------
+# DB dependency (NO auth logic here)
+# ------------------------------------------------------------------
+
+def get_db():
     db: Session = SessionLocal()
     try:
-        tenant_id = getattr(request.state, "tenant_id", None)
-
-        if tenant_id:
-            db.execute(
-                text("SET LOCAL app.tenant_id = :tenant_id"),
-                {"tenant_id": tenant_id},
-            )
-
         yield db
     finally:
         db.close()
 
 
+# ------------------------------------------------------------------
+# Auth dependency (JWT + USER lifecycle)
+# ------------------------------------------------------------------
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db=Depends(get_db),
+    db: Session = Depends(get_db),
 ) -> User:
     """
-    Resolve the authenticated user from JWT
+    Resolve authenticated user from JWT
     and enforce SaaS user lifecycle rules.
     """
 
@@ -55,13 +54,13 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    # Load user (RLS already enforces tenant isolation)
+    # RLS already enforces tenant isolation
     user = db.get(User, user_id)
 
     if not user:
         raise credentials_exception
 
-    # 🔒 USER STATUS ENFORCEMENT (CRITICAL)
+    # 🔒 USER STATUS ENFORCEMENT
     if user.status != UserStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -4,6 +4,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 
+print(">>> JWT MODULE LOADED <<<")
+print("JWT_SECRET =", os.getenv("JWT_SECRET"))
+print("ENV KEYS =", list(os.environ.keys()))
+
 SECRET_KEY = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 

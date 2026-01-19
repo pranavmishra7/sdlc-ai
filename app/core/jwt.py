@@ -3,18 +3,14 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-
-print(">>> JWT MODULE LOADED <<<")
-print("JWT_SECRET =", os.getenv("JWT_SECRET"))
-print("ENV KEYS =", list(os.environ.keys()))
-
 SECRET_KEY = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 if not SECRET_KEY:
     raise RuntimeError(
-        "JWT_SECRET (or SECRET_KEY) environment variable is required"
+        "JWT_SECRET or SECRET_KEY environment variable is required"
     )
+    
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 def create_access_token(

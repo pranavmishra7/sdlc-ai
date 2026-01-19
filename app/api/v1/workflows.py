@@ -14,7 +14,7 @@ from app.workers.celery_worker import celery_app
 from app.services.sse_manager import sse_manager
 
 from sqlalchemy.orm import Session
-from app.db.session import get_db
+from app.api.deps import get_db
 from app.db.models.sdlc_job import SDLCJob
 
 from app.api.deps import get_current_user

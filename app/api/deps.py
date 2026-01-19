@@ -1,20 +1,29 @@
 # app/api/deps.py
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
-
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from app.core.jwt import decode_token
 from app.db.session import SessionLocal
 from app.db.models.user import User, UserStatus
-
+from sqlalchemy import text
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-def get_db():
-    db = SessionLocal()
+def get_db(request: Request):
+    db: Session = SessionLocal()
     try:
+        tenant_id = getattr(request.state, "tenant_id", None)
+
+        if tenant_id:
+            db.execute(
+                text("SET LOCAL app.tenant_id = :tenant_id"),
+                {"tenant_id": tenant_id},
+            )
+
         yield db
     finally:
         db.close()

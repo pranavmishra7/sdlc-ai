@@ -17,6 +17,7 @@
 # -------------------------
 fastapi>=0.110
 uvicorn[standard]>=0.27
+fastapi-limiter>=0.1.6
 
 # -------------------------
 # HTTP client

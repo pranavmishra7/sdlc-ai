@@ -1,4 +1,7 @@
-from app.state.sdlc_state import SDLCState
+# app/workflows/sdlc_graph.py
+
+from app.state.sdlc_state import SDLCState, SDLCJobStatus
+from app.db.models.sdlc_step import ApprovalStatus
 
 from app.workflows.nodes.intake import intake_node
 from app.workflows.nodes.scope import scope_node
@@ -27,6 +30,7 @@ def run_sdlc_workflow(state: SDLCState) -> SDLCState:
     - No looping
     - No persistence
     - No retries here
+    - MAY PAUSE for approval
     """
 
     # Terminal states
@@ -39,15 +43,23 @@ def run_sdlc_workflow(state: SDLCState) -> SDLCState:
     if not node:
         raise RuntimeError(f"No node registered for step '{step}'")
 
-    # Mark step running (authoritative)
+    # Mark step running
     state.start_step(step)
 
     try:
-        # Node MUST return updated state
+        # Node returns updated state
         state = node(state)
+
+        # 🔒 APPROVAL PAUSE LOGIC
+        step_state = state.steps.get(step)
+
+        if step_state and step_state.requires_approval:
+            step_state.approval_status = ApprovalStatus.PENDING
+            state.job_status = SDLCJobStatus.WAITING_APPROVAL
+            return state  # ⛔ HARD PAUSE
+
         return state
 
     except Exception as exc:
-        # Centralized failure handling
         state.fail_step(step, exc)
         return state

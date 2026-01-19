@@ -1,12 +1,14 @@
 # app/api/v1/workflows.py
+
 import asyncio
 import json
 from uuid import uuid4
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 
-from app.state.sdlc_state import SDLCState
+from app.state.sdlc_state import SDLCState, SDLCJobStatus
 from app.storage.job_store import JobStore
 from app.workers.celery_worker import celery_app
 from app.services.sse_manager import sse_manager
@@ -16,9 +18,15 @@ from app.db.session import get_db
 from app.db.models.sdlc_job import SDLCJob
 
 from app.api.deps import get_current_user
+from app.db.models.sdlc_step import ApprovalStatus
+
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
+
+# ------------------------------------------------------------------
+# Start / Resume Workflow
+# ------------------------------------------------------------------
 
 @router.post("/start")
 def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
@@ -29,7 +37,6 @@ def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
         if JobStore(job_id).load_status() is None:
             raise HTTPException(404, "Job not found")
 
-        # pass tenant_id explicitly to worker
         celery_app.send_task(
             "app.workers.tasks.run_sdlc_job",
             args=[job_id],
@@ -52,6 +59,114 @@ def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
 
     return {"job_id": job_id, "message": "Workflow started"}
 
+
+# ------------------------------------------------------------------
+# Approval APIs (NEW)
+# ------------------------------------------------------------------
+
+@router.post("/steps/{job_id}/{step}/approve")
+def approve_step(
+    job_id: str,
+    step: str,
+    user: dict = Depends(get_current_user),
+):
+    store = JobStore(job_id)
+    state_data = store.load_status()
+
+    if not state_data:
+        raise HTTPException(404, "Job not found")
+
+    state = SDLCState.from_dict(state_data)
+    step_state = state.steps.get(step)
+
+    if not step_state:
+        raise HTTPException(404, "Step not found")
+
+    if state.job_status != SDLCJobStatus.WAITING_APPROVAL:
+        raise HTTPException(400, "Workflow is not waiting for approval")
+
+    if step_state.approval_status != ApprovalStatus.PENDING:
+        raise HTTPException(400, "Step is not pending approval")
+
+    # ✅ Approve step
+    step_state.approval_status = ApprovalStatus.APPROVED
+    step_state.approved_by = user["id"]
+    step_state.approved_at = datetime.utcnow()
+
+    state.job_status = SDLCJobStatus.RUNNING
+    store.save_status(state.to_dict())
+
+    # 🔔 Notify UI
+    asyncio.create_task(
+        sse_manager.publish(
+            job_id,
+            {
+                "event": "step_approved",
+                "step": step,
+                "approved_by": user["id"],
+            },
+        )
+    )
+
+    # ▶ Resume workflow
+    celery_app.send_task(
+        "app.workers.tasks.resume_sdlc_job",
+        args=[job_id],
+        kwargs={"tenant_id": user["tenant_id"]},
+    )
+
+    return {"status": "approved", "job_id": job_id, "step": step}
+
+
+@router.post("/steps/{job_id}/{step}/reject")
+def reject_step(
+    job_id: str,
+    step: str,
+    user: dict = Depends(get_current_user),
+):
+    store = JobStore(job_id)
+    state_data = store.load_status()
+
+    if not state_data:
+        raise HTTPException(404, "Job not found")
+
+    state = SDLCState.from_dict(state_data)
+    step_state = state.steps.get(step)
+
+    if not step_state:
+        raise HTTPException(404, "Step not found")
+
+    if state.job_status != SDLCJobStatus.WAITING_APPROVAL:
+        raise HTTPException(400, "Workflow is not waiting for approval")
+
+    if step_state.approval_status != ApprovalStatus.PENDING:
+        raise HTTPException(400, "Step is not pending approval")
+
+    # ❌ Reject step
+    step_state.approval_status = ApprovalStatus.REJECTED
+    step_state.approved_by = user["id"]
+    step_state.approved_at = datetime.utcnow()
+    state.job_status = SDLCJobStatus.DEAD_LETTER
+
+    store.save_status(state.to_dict())
+
+    asyncio.create_task(
+        sse_manager.publish(
+            job_id,
+            {
+                "event": "step_rejected",
+                "step": step,
+                "rejected_by": user["id"],
+            },
+        )
+    )
+
+    return {"status": "rejected", "job_id": job_id, "step": step}
+
+
+# ------------------------------------------------------------------
+# Status / Inspection APIs (Unchanged)
+# ------------------------------------------------------------------
 
 @router.get("/{job_id}/status")
 def get_job_status(job_id: str):
@@ -162,5 +277,4 @@ async def stream_events(job_id: str, request: Request):
 
 @router.get("/jobs")
 def list_jobs(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
-    # prefer DB RLS, but add defensive filter as well
     return db.query(SDLCJob).filter(SDLCJob.tenant_id == user["tenant_id"]).all()

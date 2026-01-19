@@ -1,16 +1,62 @@
 # app/api/deps.py
-from fastapi import Request, HTTPException, status
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError
+
+from app.core.jwt import decode_token
+from app.db.session import SessionLocal
+from app.db.models.user import User, UserStatus
 
 
-def get_current_user(request: Request):
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db=Depends(get_db),
+) -> User:
     """
-    Returns the authenticated user payload put on request.state by middleware.
-    If no user is present, raise 401.
+    Resolve the authenticated user from JWT
+    and enforce SaaS user lifecycle rules.
     """
-    user = getattr(request.state, "user", None)
-    if user is None:
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = decode_token(token)
+        user_id = payload.get("sub")
+        tenant_id = payload.get("tenant_id")
+
+        if not user_id or not tenant_id:
+            raise credentials_exception
+
+    except JWTError:
+        raise credentials_exception
+
+    # Load user (RLS already enforces tenant isolation)
+    user = db.get(User, user_id)
+
+    if not user:
+        raise credentials_exception
+
+    # 🔒 USER STATUS ENFORCEMENT (CRITICAL)
+    if user.status != UserStatus.ACTIVE:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is not active",
         )
+
     return user

@@ -45,7 +45,8 @@ sudo apt install -y \
  ## after restarting vm 
  source .venv/bin/activate
   pkill -f celery
-  redis run
+  redis run or sudo systemctl start redis-server
+
   ollama serve
   ollama run llama3.2:3b "warmup"
   celery -A app.workers.celery_worker.celery_app worker -l info

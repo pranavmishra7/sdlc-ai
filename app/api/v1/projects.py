@@ -12,7 +12,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 @router.get("/")
 def list_projects(
     db: Session = Depends(get_db),
-    user=Depends(require_roles("admin", "user")),
+    user=Depends(require_roles("ADMIN", "USER", "OWNER")),
 ):
     # RLS will filter to tenant rows automatically.
     return db.query(Project).all()

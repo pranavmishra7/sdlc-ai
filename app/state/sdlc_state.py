@@ -154,3 +154,40 @@ class SDLCState:
         state.step_approvals = data.get("step_approvals", {})
         state.dead_letter = data.get("dead_letter")
         return state
+
+
+    # ----------------------------
+    # Context helpers (agents)
+    # ----------------------------
+
+    def get_context(self) -> str:
+        """
+        Build cumulative context for downstream agents.
+        This is the canonical implementation.
+        """
+        parts = [self.product_idea]
+
+        for step, output in self.outputs.items():
+            if output and output.get("raw"):
+                parts.append(output["raw"])
+
+        return "\n\n".join(parts)
+
+    def build_context(self) -> str:
+        """
+        Backward-compatible alias.
+        Some workflow nodes still call this.
+        """
+        return self.get_context()
+
+
+    # ----------------------------
+    # Context helpers (agents)
+    # ----------------------------
+
+    def build_context(self) -> str:
+        """
+        Backward-compatible context builder used by workflow steps.
+        DO NOT REMOVE – relied upon by scope/requirements agents.
+        """
+        return self.get_context()

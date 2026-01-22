@@ -7,7 +7,7 @@ def tenant_rate_limiter(
 ):
     async def dependency(request: Request):
         user = request.state.user  # injected earlier
-        tenant_id = user["tenant_id"]
+        tenant_id = user.tenant_id
 
         limiter = RateLimiter(
             times=times,

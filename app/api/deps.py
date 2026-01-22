@@ -9,8 +9,9 @@ from app.core.jwt import decode_token
 from app.db.session import SessionLocal
 from app.db.models.user import User, UserStatus
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/v1/auth/auth/login"
+)
 
 # ------------------------------------------------------------------
 # DB dependency (NO auth logic here)
@@ -56,7 +57,7 @@ def get_current_user(
 
     # RLS already enforces tenant isolation
     user = db.get(User, user_id)
-
+    print(f"Resolved user: {user}")
     if not user:
         raise credentials_exception
 

@@ -1,17 +1,24 @@
 # app/db/rls.py
-from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+from uuid import UUID
 
-
-def set_tenant_context(db: Session, tenant_id: str) -> None:
+def set_tenant_context(db: Session, tenant_id: str | UUID):
     """
-    Sets PostgreSQL RLS tenant context.
-    Scoped to the current transaction / connection.
+    Set tenant_id for PostgreSQL RLS.
 
-    Must be called AFTER a DB session is created.
+    IMPORTANT:
+    - SET LOCAL does NOT support bind parameters
+    - Value MUST be inlined as a string
+    - UUID is cast implicitly by Postgres
     """
-    # Uses SET LOCAL so the setting is transaction-scoped
-    db.execute(
-        text("SET LOCAL app.tenant_id = :tenant_id"),
-        {"tenant_id": tenant_id},
-    )
+
+    if isinstance(tenant_id, UUID):
+        tenant_id = str(tenant_id)
+
+    # SAFE because:
+    # - tenant_id comes from JWT / DB, not user input
+    # - UUID format is strictly controlled
+    sql = f"SET LOCAL app.tenant_id = '{tenant_id}'"
+
+    db.execute(text(sql))

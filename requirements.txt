@@ -1,14 +1,15 @@
 # =========================================================
 # HOW TO RUN (from project root)
 # pip install -r requirements.txt
+#
 # 1) Activate venv
 #    source .venv/bin/activate
 #
-# 2) Run API
-#    uvicorn app.main:app --host 0.0.0.0 --port 8000
+# 2) Run API (with auto-reload)
+#    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 #
 # 3) Run Celery worker (separate terminal)
-#    celery -A app.workers.celery_worker worker --loglevel=info
+#    celery -A app.workers.celery_worker.celery_app worker -l info
 # =========================================================
 
 
@@ -17,7 +18,10 @@
 # -------------------------
 fastapi>=0.110
 uvicorn[standard]>=0.27
-fastapi-limiter>=0.1.6
+fastapi-limiter[redis]>=0.1.6
+
+# Required for OAuth2 / Swagger login forms
+python-multipart>=0.0.9
 
 # -------------------------
 # HTTP client
@@ -35,7 +39,7 @@ langchain-core
 # Async / background processing
 # -------------------------
 celery>=5.3
-redis>=5.0
+redis[hiredis]>=5.0
 
 # -------------------------
 # Database & ORM
@@ -48,8 +52,11 @@ psycopg2-binary>=2.9
 # Auth / Security
 # -------------------------
 python-jose[cryptography]>=3.3
-passlib[bcrypt]>=1.7
-bcrypt>=4.0
+
+# ⚠️ IMPORTANT:
+# bcrypt >=4 breaks passlib (causes "password >72 bytes" & backend errors)
+passlib[bcrypt]>=1.7.4
+bcrypt<4.0
 
 # -------------------------
 # Configuration / settings
@@ -69,7 +76,13 @@ tenacity>=8.2
 anyio>=4.0
 
 # -------------------------
-# UUID / JSON helpers (used implicitly)
+# Performance (used by uvicorn)
+# -------------------------
+uvloop>=0.19
+httptools>=0.6
+
+# -------------------------
+# UUID / JSON helpers
 # -------------------------
 orjson>=3.9
 

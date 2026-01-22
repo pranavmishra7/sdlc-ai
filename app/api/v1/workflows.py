@@ -40,7 +40,7 @@ def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
         celery_app.send_task(
             "app.workers.tasks.run_sdlc_job",
             args=[job_id],
-            kwargs={"tenant_id": user["tenant_id"]},
+            kwargs={"tenant_id": user.tenant_id},
         )
         return {"job_id": job_id, "message": "Workflow resumed"}
 
@@ -54,7 +54,7 @@ def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
     celery_app.send_task(
         "app.workers.tasks.run_sdlc_job",
         args=[job_id],
-        kwargs={"tenant_id": user["tenant_id"]},
+        kwargs={"tenant_id": user.tenant_id},
     )
 
     return {"job_id": job_id, "message": "Workflow started"}
@@ -86,7 +86,7 @@ def approve_step(job_id: str, step: str, user: dict = Depends(get_current_user))
     celery_app.send_task(
         "app.workers.tasks.resume_sdlc_job",
         args=[job_id],
-        kwargs={"tenant_id": user["tenant_id"]},
+        kwargs={"tenant_id": user.tenant_id},
     )
 
     return {"status": "approved", "step": step}
@@ -195,7 +195,7 @@ def reset_dead_letter_job(job_id: str, user: dict = Depends(get_current_user)):
     celery_app.send_task(
         "app.workers.tasks.run_sdlc_job",
         args=[job_id],
-        kwargs={"tenant_id": user["tenant_id"]},
+        kwargs={"tenant_id": user.tenant_id},
     )
 
     return {"job_id": job_id, "message": "Job reset and resumed"}
@@ -223,4 +223,4 @@ async def stream_events(job_id: str, request: Request):
 
 @router.get("/jobs")
 def list_jobs(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
-    return db.query(SDLCJob).filter(SDLCJob.tenant_id == user["tenant_id"]).all()
+    return db.query(SDLCJob).filter(SDLCJob.tenant_id == user.tenant_id).all()

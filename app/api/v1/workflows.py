@@ -19,7 +19,8 @@ from app.db.models.sdlc_job import SDLCJob
 
 from app.api.deps import get_current_user
 from app.db.models.sdlc_step import ApprovalStatus
-
+import json
+import re
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/workflows", tags=["workflows"])
 # ------------------------------------------------------------------
 # Start / Resume Workflow
 # ------------------------------------------------------------------
+
 
 @router.post("/start")
 def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
@@ -63,6 +65,7 @@ def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
 # ------------------------------------------------------------------
 # Approval APIs (NEW)
 # ------------------------------------------------------------------
+
 
 @router.post("/steps/{job_id}/{step}/approve")
 def approve_step(job_id: str, step: str, user: dict = Depends(get_current_user)):
@@ -110,14 +113,17 @@ def reject_step(job_id: str, step: str, user: dict = Depends(get_current_user)):
 
     return {"status": "rejected", "step": step}
 
+
 # ------------------------------------------------------------------
 # Status / Inspection APIs (Unchanged)
 # ------------------------------------------------------------------
+
 
 @router.get("/{job_id}/status")
 def get_job_status(job_id: str):
     store = JobStore(job_id)
     status = store.load_status()
+
     if status is None:
         raise HTTPException(404, "Job not found")
     return status

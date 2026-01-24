@@ -1,4 +1,6 @@
+from datetime import datetime
 from app.llm.router import get_llm
+from app.agents.safe_parser import safe_parse_json
 from app.agents.utils import compact
 
 
@@ -6,32 +8,38 @@ def run_sow(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    You are an SDLC Statement of Work (SOW) generation agent.
+    Return ONLY valid JSON.
+    No markdown. No explanations.
 
-    Using the full context below, generate a professional SOW.
+    Rules:
+    - Deliverables must be tangible
+    - Milestones must be outcome- or time-based
+    - Payment terms must be explicit
+
+    Return EXACTLY this structure:
+
+    {{
+    "deliverables": [
+        "At least 6 concrete deliverables"
+    ],
+    "milestones": [
+        "At least 5 project milestones"
+    ],
+    "payment_terms": "Clear payment structure and trigger conditions",
+    "assumptions": [
+        "At least 5 commercial or delivery assumptions"
+    ]
+    }}
 
     Context:
-    {compact(context)}
-
-    Return STRICT JSON with:
-    - project_overview
-    - scope_of_work
-    - deliverables
-    - milestones
-    - timeline
-    - assumptions
-    - exclusions
+    {context}
     """
 
     response = llm.generate(prompt)
-
-    if response is None:
-        raise RuntimeError("LLM returned None")
-    if not isinstance(response, str):
-        raise TypeError(f"LLM returned non-string response: {type(response)}")
-    if not response.strip():
-        raise RuntimeError("LLM returned empty response")
-
+    parsed = safe_parse_json(response)
     return {
-        "raw_output": response
+        "raw_output": response,
+        "section": "sow",
+        "content": parsed,
+        "generated_at": datetime.utcnow().isoformat(),
     }

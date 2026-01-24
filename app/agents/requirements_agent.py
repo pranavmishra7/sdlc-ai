@@ -1,4 +1,6 @@
+from datetime import datetime
 from app.llm.router import get_llm
+from app.agents.safe_parser import safe_parse_json
 from app.agents.utils import compact
 
 
@@ -6,28 +8,38 @@ def run_requirements(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    You are an SDLC requirements analysis agent.
+    Return ONLY valid JSON.
+    No markdown. No explanations.
 
-    Based on the context below, derive requirements.
+    Rules:
+    - Each array MUST contain at least 7 items
+    - Functional requirements must be actionable
+    - Non-functional requirements must be measurable
+    - Constraints must be real-world limitations
+
+    Return EXACTLY this structure:
+
+    {{
+    "functional_requirements": [
+        "At least 7 functional requirements"
+    ],
+    "non_functional_requirements": [
+        "At least 7 non-functional requirements"
+    ],
+    "constraints": [
+        "At least 5 constraints"
+    ]
+    }}
 
     Context:
-    {compact(context)}
-
-    Return STRICT JSON with:
-    - functional_requirements
-    - non_functional_requirements
-    - assumptions
+    {context}
     """
 
     response = llm.generate(prompt)
-
-    if response is None:
-        raise RuntimeError("LLM returned None")
-    if not isinstance(response, str):
-        raise TypeError(f"LLM returned non-string response: {type(response)}")
-    if not response.strip():
-        raise RuntimeError("LLM returned empty response")
-
+    parsed = safe_parse_json(response)
     return {
-        "raw_output": response
+        "raw_output": response,
+        "section": "requirements",
+        "content": parsed,
+        "generated_at": datetime.utcnow().isoformat(),
     }

@@ -44,6 +44,13 @@ sudo apt install -y \
 
  ## after restarting vm 
  source .venv/bin/activate
+ pip install -r requirements.txt
+
+  export REDIS_URL=redis://localhost:6379/0
+  export JWT_SECRET=change-me
+  export ALGORITHM=HS256
+  export DATABASE_URL=postgresql://neondb_owner:npg_X5fpqRK6Cawb@ep-bitter-field-ahc8s4ys-pooler.c-3.us-east-1.aws.neon.tech/sdlc_ai_prod?sslmode=require
+
   pkill -f celery
   redis run or sudo systemctl start redis-server
 

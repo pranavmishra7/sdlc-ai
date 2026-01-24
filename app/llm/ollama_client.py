@@ -4,9 +4,8 @@ from app.config.settings import settings
 
 class OllamaClient:
     """
-    Minimal Ollama HTTP client.
-    URL is always taken from settings.
-    Model can be overridden if needed.
+    Minimal, SAFE Ollama HTTP client.
+    Designed for structured enterprise outputs.
     """
 
     def __init__(self, model: str | None = None):
@@ -25,17 +24,27 @@ class OllamaClient:
                 }
             ],
             "options": {
-                "temperature": 0.2,
+                # 🔒 Determinism
+                "temperature": 0.1,
                 "top_p": 0.9,
-                "num_ctx": 2048,
-                "num_predict": 200,
-                "repeat_penalty": 1.1,
-                "mirostat": 0,
-                "stop": ["}"]
+
+                # 🧠 Enough context for SDLC
+                "num_ctx": 4096,
+
+                # 📏 Allow full documents
+                "num_predict": 1200,
+
+                # 🧪 Stability
+                "repeat_penalty": 1.05,
+                "mirostat": 0
             },
+
+            # ❌ DO NOT STOP GENERATION MID-JSON
+            # "stop": ["```"],
+
             "stream": False
         }
-        
+
         response = requests.post(
             self.url,
             json=payload,
@@ -49,12 +58,10 @@ class OllamaClient:
 
         data = response.json()
 
-        if (
-            "message" not in data
-            or "content" not in data["message"]
-        ):
-            raise RuntimeError(
-                f"Unexpected Ollama response: {data}"
-            )
+        if "message" not in data or "content" not in data["message"]:
+            raise RuntimeError(f"Unexpected Ollama response: {data}")
 
-        return data["message"]["content"]
+        content = data["message"]["content"]
+
+        # 🧹 Defensive cleanup
+        return content.strip()

@@ -30,15 +30,20 @@ class SDLCState:
 
         self.current_step = "intake"
 
+        # step -> {type, raw, parsed}
         self.outputs: Dict[str, Dict[str, Any]] = {}
+
         self.errors: Dict[str, Any] = {}
         self.retries: Dict[str, int] = {}
         self.step_started_at: Dict[str, str] = {}
         self.step_completed_at: Dict[str, str] = {}
 
-        # 🔒 APPROVAL STATE (NEW)
-        # step_name -> PENDING | APPROVED | REJECTED
+        # 🔒 APPROVAL STATE
         self.step_approvals: Dict[str, str] = {}
+
+        # 🧪 QUALITY RESULTS (NEW, non-breaking)
+        # step -> {score, issues, decision}
+        self.quality: Dict[str, Dict[str, Any]] = {}
 
         self.dead_letter: Optional[Dict[str, Any]] = None
 
@@ -68,6 +73,7 @@ class SDLCState:
         raw_output: Optional[str] = None,
         parsed_output: Optional[dict] = None,
         output_type: Optional[str] = None,
+        quality: Optional[dict] = None,  # optional, post-agent
     ):
         self.steps[step] = "completed"
         self.step_completed_at[step] = datetime.utcnow().isoformat()
@@ -77,6 +83,9 @@ class SDLCState:
             "raw": raw_output,
             "parsed": parsed_output,
         }
+
+        if quality is not None:
+            self.quality[step] = quality
 
         self._advance_step(step)
         return self
@@ -134,6 +143,7 @@ class SDLCState:
             "step_started_at": self.step_started_at,
             "step_completed_at": self.step_completed_at,
             "step_approvals": self.step_approvals,
+            "quality": self.quality,
             "dead_letter": self.dead_letter,
         }
 
@@ -152,22 +162,23 @@ class SDLCState:
         state.step_started_at = data.get("step_started_at", {})
         state.step_completed_at = data.get("step_completed_at", {})
         state.step_approvals = data.get("step_approvals", {})
+        state.quality = data.get("quality", {})
         state.dead_letter = data.get("dead_letter")
         return state
 
-
     # ----------------------------
-    # Context helpers (agents)
+    # Context helpers (CRITICAL)
     # ----------------------------
 
     def get_context(self) -> str:
         """
-        Build cumulative context for downstream agents.
-        This is the canonical implementation.
+        Canonical cumulative context builder.
+        Used by ALL agents.
         """
         parts = [self.product_idea]
 
-        for step, output in self.outputs.items():
+        for step in self.steps:
+            output = self.outputs.get(step)
             if output and output.get("raw"):
                 parts.append(output["raw"])
 
@@ -176,18 +187,6 @@ class SDLCState:
     def build_context(self) -> str:
         """
         Backward-compatible alias.
-        Some workflow nodes still call this.
-        """
-        return self.get_context()
-
-
-    # ----------------------------
-    # Context helpers (agents)
-    # ----------------------------
-
-    def build_context(self) -> str:
-        """
-        Backward-compatible context builder used by workflow steps.
-        DO NOT REMOVE – relied upon by scope/requirements agents.
+        DO NOT REMOVE.
         """
         return self.get_context()

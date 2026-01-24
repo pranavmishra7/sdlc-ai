@@ -21,7 +21,7 @@ NODE_MAP = {
 }
 
 # 🔒 Steps requiring approval
-APPROVAL_STEPS = {"architecture", "estimation"}
+# APPROVAL_STEPS = {"architecture", "estimation"}
 
 
 def run_sdlc_workflow(state: SDLCState) -> SDLCState:
@@ -39,10 +39,10 @@ def run_sdlc_workflow(state: SDLCState) -> SDLCState:
     try:
         state = node(state)
 
-        if step in APPROVAL_STEPS:
-            state.step_approvals[step] = ApprovalStatus.PENDING
-            state.job_status = SDLCJobStatus.WAITING_APPROVAL
-            return state
+        # if step in APPROVAL_STEPS:
+        #     state.step_approvals[step] = ApprovalStatus.PENDING
+        #     state.job_status = SDLCJobStatus.WAITING_APPROVAL
+        #     return state
 
         return state
 

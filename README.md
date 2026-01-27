@@ -58,3 +58,11 @@ sudo apt install -y \
   ollama run llama3.2:3b "warmup"
   celery -A app.workers.celery_worker.celery_app worker -l info
   uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  start api test payload
+  {
+  "product_idea": "create documentation for financial investment solutions",
+  "domain": "financial investments",
+  "audience": "retail investors",
+  "output_format": "technical documentation"
+}

@@ -75,10 +75,7 @@ def run_sdlc_job(self, job_id: str, tenant_id: str):
 
         state = SDLCState.from_dict(state_data)
 
-        _safe_emit(job_id, {
-            "event": "step_started",
-            "step": state.current_step
-        })
+        _safe_emit(job_id, {"event": "step_started", "step": state.current_step})
 
         try:
             state = run_sdlc_workflow(state)
@@ -87,10 +84,7 @@ def run_sdlc_job(self, job_id: str, tenant_id: str):
         finally:
             store.save_status(state.to_dict())
 
-        _safe_emit(job_id, {
-            "event": "step_finished",
-            "step": state.current_step
-        })
+        _safe_emit(job_id, {"event": "step_finished", "step": state.current_step})
 
         # 🔁 Re-enqueue if workflow still running
         if (

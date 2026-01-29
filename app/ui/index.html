@@ -29,6 +29,8 @@
       cursor: pointer;
     }
 
+    .hidden { display: none; }
+
     .step {
       margin: 14px 0;
       padding: 12px;
@@ -67,18 +69,12 @@
       margin-bottom: 6px;
     }
 
-    ul {
-      padding-left: 20px;
-    }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 6px; }
 
-    li {
-      margin-bottom: 6px;
-    }
-
-    .meta {
-      font-size: 13px;
-      color: #8bc34a;
-      margin-bottom: 10px;
+    .error {
+      color: red;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -87,63 +83,84 @@
 
 <h2>SDLC AI – Client Documentation Generator</h2>
 
-<!-- INPUT FORM -->
+<!-- ================= LOGIN ================= -->
 
-<div class="section">
-  <div class="section-title">Product Idea</div>
-  <textarea id="product_idea" rows="4">
+<div id="loginBox">
+  <h3>Login</h3>
+  <input id="username" placeholder="Username / Email" />
+  <input id="password" type="password" placeholder="Password" />
+  <br><br>
+  <button onclick="login()">Login</button>
+  <div id="loginError" class="error"></div>
+</div>
+
+<!-- ================= APP ================= -->
+
+<div id="app" class="hidden">
+
+  <!-- INPUT FORM -->
+
+  <div class="section">
+    <div class="section-title">Product Idea</div>
+    <textarea id="product_idea" rows="4">
 Create structured, client-facing documentation for a financial investment solutions application.
-  </textarea>
-</div>
+    </textarea>
+  </div>
 
-<div class="section">
-  <div class="section-title">Domain</div>
-  <input id="domain" value="Financial Services – Investment Products" />
-</div>
+  <div class="section">
+    <div class="section-title">Domain</div>
+    <input id="domain" value="Financial Services – Investment Products" />
+  </div>
 
-<div class="section">
-  <div class="section-title">Primary Audience (one per line)</div>
-  <textarea id="audience_primary" rows="3">
+  <div class="section">
+    <div class="section-title">Primary Audience (one per line)</div>
+    <textarea id="audience_primary" rows="3">
 Retail investors
 Relationship managers
-  </textarea>
-</div>
+    </textarea>
+  </div>
 
-<div class="section">
-  <div class="section-title">Secondary Audience (one per line)</div>
-  <textarea id="audience_secondary" rows="3">
+  <div class="section">
+    <div class="section-title">Secondary Audience (one per line)</div>
+    <textarea id="audience_secondary" rows="3">
 Compliance teams
 Operations teams
-  </textarea>
-</div>
+    </textarea>
+  </div>
 
-<div class="section">
-  <div class="section-title">Documentation Objective</div>
-  <textarea id="objective" rows="3">
+  <div class="section">
+    <div class="section-title">Documentation Objective</div>
+    <textarea id="objective" rows="3">
 Provide clear, regulator-safe documentation without offering financial advice.
-  </textarea>
-</div>
+    </textarea>
+  </div>
 
-<div class="section">
-  <div class="section-title">Regulatory Constraints (one per line)</div>
-  <textarea id="regulatory" rows="3">
+  <div class="section">
+    <div class="section-title">Regulatory Constraints (one per line)</div>
+    <textarea id="regulatory" rows="3">
 No financial advice
 No performance guarantees
 Regulated financial environment
-  </textarea>
+    </textarea>
+  </div>
+
+  <br>
+  <button onclick="startJob()">Start SDLC Job</button>
+
+  <h3>Status</h3>
+  <div id="status">Idle</div>
+
+  <h3>Workflow</h3>
+  <div id="steps"></div>
 </div>
 
-<br>
-<button onclick="startJob()">Start SDLC Job</button>
-
-<h3>Status</h3>
-<div id="status">Idle</div>
-
-<h3>Workflow</h3>
-<div id="steps"></div>
-
 <script>
-const API = "/api/v1/api/workflows/workflows";
+/* ================= CONFIG ================= */
+
+const WORKFLOW_API = "/api/v1/api/workflows/workflows";
+const LOGIN_API = "/api/v1/auth/auth/login";
+
+let token = localStorage.getItem("access_token");
 let jobId = null;
 let poller = null;
 
@@ -161,7 +178,57 @@ const LABELS = {
   sow: "Statement of Work"
 };
 
-/* ---------------- START JOB ---------------- */
+/* ================= AUTH ================= */
+
+if (token) showApp();
+
+function login() {
+  fetch(LOGIN_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: username.value,
+      password: password.value
+    })
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.access_token) {
+        loginError.innerText = "Invalid credentials";
+        return;
+      }
+      token = d.access_token;
+      localStorage.setItem("access_token", token);
+      showApp();
+    })
+    .catch(() => loginError.innerText = "Login failed");
+}
+
+function showApp() {
+  loginBox.classList.add("hidden");
+  app.classList.remove("hidden");
+}
+
+/* ================= FETCH WRAPPER ================= */
+
+function authFetch(url, options = {}) {
+  options.headers = {
+    ...(options.headers || {}),
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json"
+  };
+
+  return fetch(url, options).then(r => {
+    if (r.status === 401) {
+      alert("Session expired. Please login again.");
+      localStorage.removeItem("access_token");
+      location.reload();
+    }
+    return r;
+  });
+}
+
+/* ================= START JOB ================= */
 
 function startJob() {
   const payload = {
@@ -178,9 +245,8 @@ function startJob() {
     }
   };
 
-  fetch(`${API}/start`, {
+  authFetch(`${WORKFLOW_API}/start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   })
     .then(r => r.json())
@@ -192,10 +258,10 @@ function startJob() {
     });
 }
 
-/* ---------------- STATUS ---------------- */
+/* ================= STATUS ================= */
 
 function fetchStatus() {
-  fetch(`${API}/${jobId}/status`)
+  authFetch(`${WORKFLOW_API}/${jobId}/status`)
     .then(r => r.json())
     .then(updateUI);
 }
@@ -217,7 +283,7 @@ function updateUI(data) {
   }
 }
 
-/* ---------------- STEP UI ---------------- */
+/* ================= STEPS ================= */
 
 function createStep(step) {
   const container = document.getElementById("steps");
@@ -251,10 +317,8 @@ function updateStep(step, state) {
   document.getElementById(`state-${step}`).innerText = state;
 }
 
-/* ---------------- STEP DATA ---------------- */
-
 function fetchStep(step) {
-  fetch(`${API}/${jobId}/steps/${step}`)
+  authFetch(`${WORKFLOW_API}/${jobId}/steps/${step}`)
     .then(r => r.json())
     .then(res => {
       cache[step] = res;
@@ -265,16 +329,14 @@ function fetchStep(step) {
 function renderStep(step) {
   const body = document.getElementById(`body-${step}`);
   const data = cache[step]?.data?.parsed;
-
   if (!data) {
     body.innerHTML = "<div>No output</div>";
     return;
   }
-
   body.innerHTML = renderParsed(step, data);
 }
 
-/* ---------------- RENDERERS ---------------- */
+/* ================= RENDERERS ================= */
 
 function renderParsed(step, d) {
   switch (step) {

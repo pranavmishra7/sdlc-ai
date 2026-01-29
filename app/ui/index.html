@@ -13,6 +13,12 @@
       background: #fafafa;
     }
 
+    h2,
+    h3,
+    h4 {
+      margin-top: 24px;
+    }
+
     textarea,
     input {
       width: 100%;
@@ -85,6 +91,10 @@
       margin-bottom: 6px;
     }
 
+    p {
+      margin: 6px 0;
+    }
+
     .error {
       color: red;
       margin-top: 10px;
@@ -113,48 +123,32 @@
 
     <div class="section">
       <div class="section-title">Product Idea</div>
-      <textarea id="product_idea" rows="3">
-Create structured, client-facing documentation for a financial investment solutions application.
-    </textarea>
+      <textarea id="product_idea" rows="4"></textarea>
     </div>
 
     <div class="section">
       <div class="section-title">Domain</div>
-      <input id="domain" value="Financial Services – Investment Products and Portfolio Management" />
+      <input id="domain" />
     </div>
 
     <div class="section">
-      <div class="section-title">Primary Audience (one per line)</div>
-      <textarea id="audience_primary" rows="4" style="height: fit-content;">
-Retail investors
-Relationship managers
-Financial planners
-    </textarea>
+      <div class="section-title">Primary Audience</div>
+      <textarea id="audience_primary" rows="3"></textarea>
     </div>
 
     <div class="section">
-      <div class="section-title">Secondary Audience (one per line)</div>
-      <textarea id="audience_secondary" rows="4" style="height: fit-content;">
-Compliance teams
-Operations teams
-Financial advisors
-    </textarea>
+      <div class="section-title">Secondary Audience</div>
+      <textarea id="audience_secondary" rows="3"></textarea>
     </div>
 
     <div class="section">
-      <div class="section-title">Documentation Objective</div>
-      <textarea id="objective" rows="3">
-Provide clear, accurate, regulator-safe documentation without offering financial advice.
-    </textarea>
+      <div class="section-title">Objective</div>
+      <textarea id="objective" rows="3"></textarea>
     </div>
 
     <div class="section">
-      <div class="section-title">Regulatory Constraints (one per line)</div>
-      <textarea id="regulatory" rows="3">
-No financial advice
-No performance guarantees
-Regulated financial environment
-    </textarea>
+      <div class="section-title">Regulatory Constraints</div>
+      <textarea id="regulatory" rows="3"></textarea>
     </div>
 
     <br>
@@ -169,7 +163,7 @@ Regulated financial environment
 
   <script>
     /* ================= CONFIG ================= */
-    const statusElement = document.getElementById("status");
+    const statusEl = document.getElementById("status");
     const WORKFLOW_API = "/api/v1/api/workflows/workflows";
     const LOGIN_API = "/api/v1/auth/auth/login";
 
@@ -182,12 +176,12 @@ Regulated financial environment
     const cache = {};
 
     const LABELS = {
-      intake: "Problem Definition",
-      scope: "Scope",
+      intake: "Problem Statement",
+      scope: "Scope Definition",
       requirements: "Requirements",
       architecture: "Architecture",
-      estimation: "Estimation",
-      risk: "Risk",
+      estimation: "Effort & Timeline",
+      risk: "Risk Analysis",
       sow: "Statement of Work"
     };
 
@@ -196,15 +190,15 @@ Regulated financial environment
     if (token) showApp();
 
     function login() {
-      const form = new URLSearchParams();
-      form.append("grant_type", "password");
-      form.append("username", username.value);
-      form.append("password", password.value);
+      const formData = new URLSearchParams();
+      formData.append("grant_type", "password");
+      formData.append("username", username.value);
+      formData.append("password", password.value);
 
       fetch(LOGIN_API, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: form.toString()
+        body: formData.toString()
       })
         .then(r => r.json())
         .then(d => {
@@ -270,7 +264,10 @@ Regulated financial environment
     /* ================= START JOB ================= */
 
     function startJob() {
-      if (poller) clearInterval(poller);
+      if (poller) {
+        clearInterval(poller);
+        poller = null;
+      }
 
       const payload = {
         product_idea: product_idea.value,
@@ -282,7 +279,7 @@ Regulated financial environment
         documentation_objective: objective.value,
         regulatory_context: regulatory.value.split("\n").filter(Boolean)
       };
-      statusElement.innerText = "Starting workflow…";
+      statusEl.innerText = "Starting workflow…";
       status.innerText = "Starting workflow…";
 
       authFetch(`${WORKFLOW_API}/start`, {
@@ -292,9 +289,12 @@ Regulated financial environment
         .then(r => r.json())
         .then(d => {
           jobId = d.job_id;
-          statusElement.innerText = `Workflow started (${jobId})`;
-          status.innerText = `Workflow started (${jobId})`;
-          fetchStatus();                      // 🔑 immediate fetch
+          status.innerText = `Workflow started (Job ID: ${jobId})`;
+          statusEl.innerText = `Workflow started (Job ID: ${jobId})`;
+          // ✅ Immediate fetch so status never stays Idle
+          fetchStatus();
+
+          // ✅ Single poller only
           poller = setInterval(fetchStatus, 3000);
         });
     }
@@ -306,28 +306,31 @@ Regulated financial environment
 
       authFetch(`${WORKFLOW_API}/${jobId}/status`)
         .then(r => r.json())
-        .then(updateUI);
+        .then(updateUI)
+        .catch(() => {
+          status.innerText = "Error fetching status";
+          statusEl.innerText = "Error fetching status";
+        });
     }
 
     function updateUI(data) {
       if (!data || !data.current_step) return;
-      statusElement.innerText =
-        data.current_step === "completed"
-          ? "Workflow completed ✅"
-          : "Current step: " + (LABELS[data.current_step] || data.current_step);
-      status.innerText =
-        data.current_step === "completed"
-          ? "Workflow completed ✅"
-          : "Current step: " + (LABELS[data.current_step] || data.current_step);
+
+      if (data.current_step === "completed") {
+        status.innerText = "Workflow completed ✅";
+        statusEl.innerText = "Workflow completed ✅";
+        if (poller) {
+          clearInterval(poller);
+          poller = null;
+        }
+      } else {
+        status.innerText = "Current step: " + (LABELS[data.current_step] || data.current_step);
+        statusEl.innerText = "Current step: " + (LABELS[data.current_step] || data.current_step);
+      }
 
       for (const step in data.steps) {
         if (!created[step]) createStep(step);
         updateStep(step, data.steps[step]);
-      }
-
-      if (data.current_step === "completed" && poller) {
-        clearInterval(poller);
-        poller = null;
       }
     }
 
@@ -374,16 +377,17 @@ Regulated financial environment
 
     function renderStep(step) {
       const body = document.getElementById(`body-${step}`);
-      const parsed = cache[step]?.data?.parsed;   // ✅ correct key
+      const parsed = cache[step]?.data?.parsed_output;
       body.innerHTML = parsed ? renderAny(parsed) : "<div>No output</div>";
     }
 
-    /* ================= GENERIC RENDER ================= */
+    /* ================= GENERIC RENDERER ================= */
 
     function renderAny(value) {
       if (Array.isArray(value)) {
         return `<ul>${value.map(v => `<li>${renderAny(v)}</li>`).join("")}</ul>`;
       }
+
       if (typeof value === "object" && value !== null) {
         return Object.entries(value)
           .map(([k, v]) => `
@@ -391,8 +395,10 @@ Regulated financial environment
           <div class="section-title">${toTitle(k)}</div>
           ${renderAny(v)}
         </div>
-      `).join("");
+      `)
+          .join("");
       }
+
       return `<p>${value}</p>`;
     }
 

@@ -238,7 +238,7 @@ Regulated financial environment
 
     function startJob() {
       if (poller) clearInterval(poller);
-
+      const statusElement = document.getElementById("status");
       const payload = {
         product_idea: product_idea.value,
         domain: domain.value,
@@ -249,7 +249,7 @@ Regulated financial environment
         documentation_objective: objective.value,
         regulatory_context: regulatory.value.split("\n").filter(Boolean)
       };
-
+      statusElement.innerText = "Starting workflow…";
       status.innerText = "Starting workflow…";
 
       authFetch(`${WORKFLOW_API}/start`, {
@@ -259,6 +259,7 @@ Regulated financial environment
         .then(r => r.json())
         .then(d => {
           jobId = d.job_id;
+          statusElement.innerText = `Workflow started (${jobId})`;
           status.innerText = `Workflow started (${jobId})`;
           fetchStatus();                      // 🔑 immediate fetch
           poller = setInterval(fetchStatus, 3000);
@@ -277,7 +278,11 @@ Regulated financial environment
 
     function updateUI(data) {
       if (!data || !data.current_step) return;
-
+      const statusElement = document.getElementById("status");
+      statusElement.innerText =
+        data.current_step === "completed"
+          ? "Workflow completed ✅"
+          : "Current step: " + (LABELS[data.current_step] || data.current_step);
       status.innerText =
         data.current_step === "completed"
           ? "Workflow completed ✅"

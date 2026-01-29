@@ -367,7 +367,7 @@ Data privacy compliance
       header.onclick = () => {
         expanded[step] = !expanded[step];
         body.style.display = expanded[step] ? "block" : "none";
-        if (expanded[step] && !cache[step]) fetchStep(step);
+        if (expanded[step]) fetchStep(step);
       };
 
       box.appendChild(header);

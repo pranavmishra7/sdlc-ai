@@ -169,7 +169,7 @@ Regulated financial environment
 
   <script>
     /* ================= CONFIG ================= */
-
+    const statusElement = document.getElementById("status");
     const WORKFLOW_API = "/api/v1/api/workflows/workflows";
     const LOGIN_API = "/api/v1/auth/auth/login";
 
@@ -226,21 +226,52 @@ Regulated financial environment
     /* ================= FETCH ================= */
 
     function authFetch(url, options = {}) {
-      return fetch(url, {
-        ...options,
-        headers: {
-          ...(options.headers || {}),
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
+      options.headers = {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      };
+
+      return fetch(url, options).then(async response => {
+        if (response.status === 401) {
+          handleUnauthorized();
+          throw new Error("Unauthorized");
         }
+        return response;
       });
+    }
+
+
+    function handleUnauthorized() {
+      console.warn("Unauthorized – redirecting to login");
+
+      // Stop polling
+      if (poller) {
+        clearInterval(poller);
+        poller = null;
+      }
+
+      // Clear auth
+      token = null;
+      jobId = null;
+      localStorage.removeItem("access_token");
+
+      // Reset UI
+      statusEl.innerText = "Session expired. Please login again.";
+      stepsEl.innerHTML = "";
+
+      // Show login
+      app.classList.add("hidden");
+      loginBox.classList.remove("hidden");
+
+      loginError.innerText = "Session expired. Please login again.";
     }
 
     /* ================= START JOB ================= */
 
     function startJob() {
       if (poller) clearInterval(poller);
-      const statusElement = document.getElementById("status");
+
       const payload = {
         product_idea: product_idea.value,
         domain: domain.value,
@@ -280,7 +311,6 @@ Regulated financial environment
 
     function updateUI(data) {
       if (!data || !data.current_step) return;
-      const statusElement = document.getElementById("status");
       statusElement.innerText =
         data.current_step === "completed"
           ? "Workflow completed ✅"

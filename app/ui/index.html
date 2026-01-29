@@ -71,7 +71,6 @@
 
     ul { padding-left: 20px; }
     li { margin-bottom: 6px; }
-
     p { margin: 6px 0; }
 
     .error {
@@ -210,6 +209,11 @@ function authFetch(url, options = {}) {
 /* ================= START JOB ================= */
 
 function startJob() {
+  if (poller) {
+    clearInterval(poller);
+    poller = null;
+  }
+
   const payload = {
     product_idea: product_idea.value,
     domain: domain.value,
@@ -221,6 +225,8 @@ function startJob() {
     regulatory_context: regulatory.value.split("\n").filter(Boolean)
   };
 
+  status.innerText = "Starting workflow…";
+
   authFetch(`${WORKFLOW_API}/start`, {
     method: "POST",
     body: JSON.stringify(payload)
@@ -228,7 +234,12 @@ function startJob() {
     .then(r => r.json())
     .then(d => {
       jobId = d.job_id;
-      status.innerText = `Job started (${jobId})`;
+      status.innerText = `Workflow started (Job ID: ${jobId})`;
+
+      // ✅ Immediate fetch so status never stays Idle
+      fetchStatus();
+
+      // ✅ Single poller only
       poller = setInterval(fetchStatus, 3000);
     });
 }
@@ -236,23 +247,34 @@ function startJob() {
 /* ================= STATUS ================= */
 
 function fetchStatus() {
+  if (!jobId) return;
+
   authFetch(`${WORKFLOW_API}/${jobId}/status`)
     .then(r => r.json())
-    .then(updateUI);
+    .then(updateUI)
+    .catch(() => {
+      status.innerText = "Error fetching status";
+    });
 }
 
 function updateUI(data) {
-  status.innerText =
-    data.current_step === "completed"
-      ? "Workflow completed ✅"
-      : "Current step: " + LABELS[data.current_step];
+  if (!data || !data.current_step) return;
+
+  if (data.current_step === "completed") {
+    status.innerText = "Workflow completed ✅";
+
+    if (poller) {
+      clearInterval(poller);
+      poller = null;
+    }
+  } else {
+    status.innerText = "Current step: " + (LABELS[data.current_step] || data.current_step);
+  }
 
   for (const step in data.steps) {
     if (!created[step]) createStep(step);
     updateStep(step, data.steps[step]);
   }
-
-  if (data.current_step === "completed") clearInterval(poller);
 }
 
 /* ================= STEPS ================= */
@@ -264,7 +286,7 @@ function createStep(step) {
 
   const header = document.createElement("div");
   header.className = "header";
-  header.innerHTML = `<span>${LABELS[step]}</span><span id="state-${step}"></span>`;
+  header.innerHTML = `<span>${LABELS[step] || step}</span><span id="state-${step}"></span>`;
 
   const body = document.createElement("div");
   body.id = `body-${step}`;
@@ -299,14 +321,10 @@ function fetchStep(step) {
 function renderStep(step) {
   const body = document.getElementById(`body-${step}`);
   const parsed = cache[step]?.data?.parsed_output;
-  if (!parsed) {
-    body.innerHTML = "<div>No output</div>";
-    return;
-  }
-  body.innerHTML = renderAny(parsed);
+  body.innerHTML = parsed ? renderAny(parsed) : "<div>No output</div>";
 }
 
-/* ================= GENERIC RENDERER (THE FIX) ================= */
+/* ================= GENERIC RENDERER ================= */
 
 function renderAny(value) {
   if (Array.isArray(value)) {
@@ -328,9 +346,7 @@ function renderAny(value) {
 }
 
 function toTitle(text) {
-  return text
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, c => c.toUpperCase());
+  return text.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 </script>
 

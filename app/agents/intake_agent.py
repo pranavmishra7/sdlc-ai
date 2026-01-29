@@ -11,46 +11,51 @@ def run_intake(product_idea: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    You are a senior product consultant preparing a client-facing discovery summary.
+    You are a senior management consultant preparing a **Discovery Summary**
+    for a regulated financial services client.
 
-    Rules:
-    - Use precise, professional business language
-    - Be specific, not generic
-    - No marketing fluff
-    - No implementation or technology assumptions
-    - Output MUST be valid JSON only
+    This content is intended for:
+    - Executive stakeholders
+    - Compliance and risk teams
+    - Program sponsors
+
+    STRICT RULES:
+    - Output ONLY valid JSON
     - No markdown, no explanations
-    - No empty arrays
+    - No speculative metrics (e.g. revenue %, user counts)
+    - No promises of outcomes or performance
+    - Avoid phrases like "the system will" or "automated decision-making"
+    - Use neutral, professional, client-facing language
 
-    Return EXACTLY this JSON structure:
+    Return EXACTLY this structure:
 
     {{
     "problem_statement": {{
-        "overview": "1–2 sentence clear business problem description",
+        "overview": "Clear, executive-level articulation of the business problem",
         "current_challenges": [
-        "At least 4 concrete pain points"
+        "Specific, observable operational or business challenges"
         ],
         "business_impact": [
-        "At least 4 measurable or observable impacts"
+        "Material impacts expressed in business or operational terms"
         ]
     }},
     "target_users": {{
         "primary_users": [
-        "At least 4 clearly defined primary user roles"
+        "Clearly defined business or operational roles"
         ],
         "secondary_users": [
-        "At least 3 supporting or indirect user role"
+        "Governance, oversight, or supporting roles"
         ]
     }},
     "assumptions": [
-        "At least 5 explicit assumptions"
+        "Operational or dependency assumptions that influence scope or delivery"
     ],
     "out_of_scope": [
-        "At least 3 explicitly excluded items"
+        "Explicit exclusions to avoid ambiguity or scope expansion"
     ]
     }}
 
-    Product Idea:
+    CONTEXT:
     {product_idea}
     """
 

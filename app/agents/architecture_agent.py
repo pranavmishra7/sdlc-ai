@@ -8,34 +8,38 @@ def run_architecture(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    Return ONLY valid JSON.
-    No markdown. No explanations.
+    You are preparing a **Solution Architecture Overview**
+    for a regulated financial services client.
 
-    Rules:
-    - All arrays MUST have at least 5 items
-    - Components must be logical, not just tools
-    - Data flow must describe movement between components
-    - Technology stack must be realistic but not vendor-locked
+    Audience includes:
+    - Enterprise architects
+    - Security and compliance teams
+    - Business stakeholders
+
+    STRICT RULES:
+    - Output ONLY valid JSON
+    - No markdown, no explanations
+    - Avoid vendor or technology bias unless necessary
+    - Focus on logical components and responsibilities
+    - Do NOT describe automated investment decision-making
+    - Frame analytics as insight and decision support
 
     Return EXACTLY this structure:
 
     {{
-    "architecture_overview": "3–4 sentence high-level architecture description",
+    "architecture_overview": "High-level description of the solution architecture and its purpose",
     "components": [
-        "At least 6 logical system components"
+        "Major logical components and their responsibilities"
     ],
     "data_flow": [
-        "At least 5 clear data flow steps"
+        "Key data flows described in business-relevant terms"
     ],
-    "technology_stack": [
-        "At least 6 technologies or platform categories"
-    ],
-    "assumptions": [
-        "At least 5 architecture assumptions"
+    "technology_assumptions": [
+        "Assumptions that materially influence architectural decisions"
     ]
     }}
 
-    Context:
+    CONTEXT:
     {context}
     """
 

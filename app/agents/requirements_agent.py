@@ -8,30 +8,37 @@ def run_requirements(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    Return ONLY valid JSON.
-    No markdown. No explanations.
+    You are preparing a **Business Requirements Document (BRD)**
+    for a financial services engagement.
 
-    Rules:
-    - Each array MUST contain at least 7 items
-    - Functional requirements must be actionable
-    - Non-functional requirements must be measurable
-    - Constraints must be real-world limitations
+    These requirements must be suitable for:
+    - Design and implementation
+    - Compliance review
+    - User acceptance testing (UAT)
+
+    STRICT RULES:
+    - Output ONLY valid JSON
+    - No markdown, no explanations
+    - No placeholders or vague phrasing
+    - No automated investment advice or decision execution
+    - Requirements must be testable and unambiguous
+    - Express capabilities as decision support, not decision automation
 
     Return EXACTLY this structure:
 
     {{
     "functional_requirements": [
-        "At least 7 functional requirements"
+        "User-facing or business-facing capabilities stated as verifiable requirements"
     ],
     "non_functional_requirements": [
-        "At least 7 non-functional requirements"
+        "Measurable performance, security, compliance, or availability requirements"
     ],
     "constraints": [
-        "At least 5 constraints"
+        "Known limitations, dependencies, or external constraints"
     ]
     }}
 
-    Context:
+    CONTEXT:
     {context}
     """
 

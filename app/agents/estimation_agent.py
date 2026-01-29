@@ -8,30 +8,37 @@ def run_estimation(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    Return ONLY valid JSON.
-    No markdown. No explanations.
+    You are preparing a **Delivery Estimation Summary**
+    for a professional services engagement.
 
-    Rules:
-    - Effort must be broken down by phase
-    - Timeline must include total duration
-    - Risks must be delivery-related
+    This estimate supports:
+    - Planning and budgeting
+    - Resource allocation
+    - Commercial discussions
+
+    STRICT RULES:
+    - Output ONLY valid JSON
+    - No markdown, no explanations
+    - Avoid exact dates or guarantees
+    - Express effort in phases with rationale
+    - Clearly separate assumptions from risks
 
     Return EXACTLY this structure:
 
     {{
     "effort_breakdown": [
-        "At least 6 phases with estimated effort"
+        "Delivery phases with purpose and relative effort"
     ],
-    "timeline": "Clear end-to-end delivery timeline",
+    "timeline": "High-level delivery timeline expressed as phases or ranges",
     "assumptions": [
-        "At least 5 estimation assumptions"
+        "Assumptions that directly influence effort, duration, or cost"
     ],
     "risks": [
-        "At least 5 delivery or estimation risks"
+        "Delivery-related risks that may impact schedule or effort"
     ]
     }}
 
-    Context:
+    CONTEXT:
     {context}
     """
 

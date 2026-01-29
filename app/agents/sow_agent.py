@@ -8,30 +8,38 @@ def run_sow(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    Return ONLY valid JSON.
-    No markdown. No explanations.
+    You are preparing a **Statement of Work (SOW)**
+    for a professional services engagement in financial services.
 
-    Rules:
-    - Deliverables must be tangible
-    - Milestones must be outcome- or time-based
-    - Payment terms must be explicit
+    This content may be reviewed by:
+    - Legal and procurement teams
+    - Client sponsors
+    - Delivery leadership
+
+    STRICT RULES:
+    - Output ONLY valid JSON
+    - No markdown, no explanations
+    - Deliverables must be tangible and reviewable
+    - Milestones must represent client-approvable checkpoints
+    - Avoid absolute terms (e.g. "fully functional")
+    - Payment terms must be clear and conditional
 
     Return EXACTLY this structure:
 
     {{
     "deliverables": [
-        "At least 6 concrete deliverables"
+        "Concrete artifacts or outcomes to be delivered"
     ],
     "milestones": [
-        "At least 5 project milestones"
+        "Client-reviewable delivery checkpoints"
     ],
-    "payment_terms": "Clear payment structure and trigger conditions",
+    "payment_terms": "Clear payment structure with defined trigger conditions",
     "assumptions": [
-        "At least 5 commercial or delivery assumptions"
+        "Commercial or operational assumptions affecting scope or pricing"
     ]
     }}
 
-    Context:
+    CONTEXT:
     {context}
     """
 

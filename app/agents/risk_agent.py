@@ -8,26 +8,33 @@ def run_risk(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    Return ONLY valid JSON.
-    No markdown. No explanations.
+    You are preparing a **Project Risk Register**
+    for a financial services engagement.
 
-    Rules:
-    - Risks must be concrete and realistic
-    - Mitigations must directly map to risks
-    - Arrays must be equal length
+    This register will be reviewed by:
+    - Program governance
+    - Compliance teams
+    - Client stakeholders
+
+    STRICT RULES:
+    - Output ONLY valid JSON
+    - No markdown, no explanations
+    - Risks must be realistic and specific
+    - Mitigations must be actionable and proportional
+    - Avoid speculative or generic risks
 
     Return EXACTLY this structure:
 
     {{
     "risks": [
-        "At least 6 clearly described risks"
+        "Clearly articulated delivery, operational, or compliance risks"
     ],
     "mitigations": [
-        "At least 6 corresponding mitigations"
+        "Concrete actions to reduce likelihood or impact of the listed risks"
     ]
     }}
 
-    Context:
+    CONTEXT:
     {context}
     """
 

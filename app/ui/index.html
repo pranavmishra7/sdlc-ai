@@ -183,13 +183,18 @@ const LABELS = {
 if (token) showApp();
 
 function login() {
+  const formData = new URLSearchParams();
+  formData.append("grant_type", "password");
+  formData.append("username", username.value);
+  formData.append("password", password.value);
+
   fetch(LOGIN_API, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      username: username.value,
-      password: password.value
-    })
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "accept": "application/json"
+    },
+    body: formData.toString()
   })
     .then(r => r.json())
     .then(d => {
@@ -197,11 +202,14 @@ function login() {
         loginError.innerText = "Invalid credentials";
         return;
       }
+
       token = d.access_token;
       localStorage.setItem("access_token", token);
       showApp();
     })
-    .catch(() => loginError.innerText = "Login failed");
+    .catch(() => {
+      loginError.innerText = "Login failed";
+    });
 }
 
 function showApp() {

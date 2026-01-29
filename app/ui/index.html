@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8" />
   <title>SDLC AI</title>
@@ -12,11 +13,14 @@
       background: #fafafa;
     }
 
-    h2, h3, h4 {
+    h2,
+    h3,
+    h4 {
       margin-top: 24px;
     }
 
-    textarea, input {
+    textarea,
+    input {
       width: 100%;
       padding: 8px;
       margin-top: 6px;
@@ -29,7 +33,9 @@
       cursor: pointer;
     }
 
-    .hidden { display: none; }
+    .hidden {
+      display: none;
+    }
 
     .step {
       margin: 14px 0;
@@ -39,9 +45,17 @@
       background: #fff;
     }
 
-    .pending { background: #f5f5f5; }
-    .running { background: #fff3cd; }
-    .completed { background: #e8f5e9; }
+    .pending {
+      background: #f5f5f5;
+    }
+
+    .running {
+      background: #fff3cd;
+    }
+
+    .completed {
+      background: #e8f5e9;
+    }
 
     .header {
       display: flex;
@@ -69,9 +83,17 @@
       margin-bottom: 6px;
     }
 
-    ul { padding-left: 20px; }
-    li { margin-bottom: 6px; }
-    p { margin: 6px 0; }
+    ul {
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    p {
+      margin: 6px 0;
+    }
 
     .error {
       color: red;
@@ -82,290 +104,291 @@
 
 <body>
 
-<h2>SDLC AI – Client Documentation Generator</h2>
+  <h2>SDLC AI – Client Documentation Generator</h2>
 
-<!-- ================= LOGIN ================= -->
+  <!-- ================= LOGIN ================= -->
 
-<div id="loginBox">
-  <h3>Login</h3>
-  <input id="username" placeholder="Username / Email" />
-  <input id="password" type="password" placeholder="Password" />
-  <br><br>
-  <button onclick="login()">Login</button>
-  <div id="loginError" class="error"></div>
-</div>
+  <div id="loginBox">
+    <h3>Login</h3>
+    <input id="username" placeholder="Username / Email" />
+    <input id="password" type="password" placeholder="Password" />
+    <br><br>
+    <button onclick="login()">Login</button>
+    <div id="loginError" class="error"></div>
+  </div>
 
-<!-- ================= APP ================= -->
+  <!-- ================= APP ================= -->
 
-<div id="app" class="hidden">
+  <div id="app" class="hidden">
 
-  <div class="section">
-    <div class="section-title">Product Idea</div>
-    <textarea id="product_idea" rows="4">
+    <div class="section">
+      <div class="section-title">Product Idea</div>
+      <textarea id="product_idea" rows="4">
       Create structured, client-facing documentation for a financial investment solutions application.
     </textarea>
-  </div>
+    </div>
 
-  <div class="section">
-    <div class="section-title">Domain</div>
-    <input id="domain" value="Financial Services – Investment Products"/>
-  </div>
+    <div class="section">
+      <div class="section-title">Domain</div>
+      <input id="domain" value="Financial Services – Investment Products" />
+    </div>
 
-  <div class="section">
-    <div class="section-title">Primary Audience (one per line)</div>
-    <textarea id="audience_primary" rows="3">
+    <div class="section">
+      <div class="section-title">Primary Audience (one per line)</div>
+      <textarea id="audience_primary" rows="3">
       Financial Advisors
       Wealth Management Consultants
       Investment Analysts
     </textarea>
-  </div>
+    </div>
 
-  <div class="section">
-    <div class="section-title">Secondary Audience (one per line)</div>
-    <textarea id="audience_secondary" rows="3">
+    <div class="section">
+      <div class="section-title">Secondary Audience (one per line)</div>
+      <textarea id="audience_secondary" rows="3">
       Compliance Officers
       IT Support Staff
       End Clients
     </textarea>
-  </div>
+    </div>
 
-  <div class="section">
-    <div class="section-title">Codumentation Objective</div>
-    <textarea id="objective" rows="3">
+    <div class="section">
+      <div class="section-title">Codumentation Objective</div>
+      <textarea id="objective" rows="3">
       Provide clear, comprehensive documentation to help users understand, implement, and comply with the investment solutions offered by the application without offering financial advice.
     </textarea>
-  </div>
+    </div>
 
-  <div class="section">
-    <div class="section-title">Regulatory Constraints (one per line)</div>
-    <textarea id="regulatory" rows="3">
+    <div class="section">
+      <div class="section-title">Regulatory Constraints (one per line)</div>
+      <textarea id="regulatory" rows="3">
       SEC Regulations
       FINRA Guidelines
       GDPR Compliance
       MiFID II Requirements
     </textarea>
+    </div>
+
+    <br>
+    <button onclick="startJob()">Start SDLC Job</button>
+
+    <h3>Status</h3>
+    <div id="status">Idle</div>
+
+    <h3>Workflow</h3>
+    <div id="steps"></div>
   </div>
 
-  <br>
-  <button onclick="startJob()">Start SDLC Job</button>
+  <script>
+    /* ================= CONFIG ================= */
 
-  <h3>Status</h3>
-  <div id="status">Idle</div>
+    const WORKFLOW_API = "/api/v1/api/workflows/workflows";
+    const LOGIN_API = "/api/v1/auth/auth/login";
 
-  <h3>Workflow</h3>
-  <div id="steps"></div>
-</div>
+    let token = localStorage.getItem("access_token");
+    let jobId = null;
+    let poller = null;
 
-<script>
-/* ================= CONFIG ================= */
+    const created = {};
+    const expanded = {};
+    const cache = {};
 
-const WORKFLOW_API = "/api/v1/api/workflows/workflows";
-const LOGIN_API = "/api/v1/auth/auth/login";
+    const LABELS = {
+      intake: "Problem Statement",
+      scope: "Scope Definition",
+      requirements: "Requirements",
+      architecture: "Architecture",
+      estimation: "Effort & Timeline",
+      risk: "Risk Analysis",
+      sow: "Statement of Work"
+    };
 
-let token = localStorage.getItem("access_token");
-let jobId = null;
-let poller = null;
+    /* ================= AUTH ================= */
 
-const created = {};
-const expanded = {};
-const cache = {};
+    if (token) showApp();
 
-const LABELS = {
-  intake: "Problem Statement",
-  scope: "Scope Definition",
-  requirements: "Requirements",
-  architecture: "Architecture",
-  estimation: "Effort & Timeline",
-  risk: "Risk Analysis",
-  sow: "Statement of Work"
-};
+    function login() {
+      const formData = new URLSearchParams();
+      formData.append("grant_type", "password");
+      formData.append("username", username.value);
+      formData.append("password", password.value);
 
-/* ================= AUTH ================= */
-
-if (token) showApp();
-
-function login() {
-  const formData = new URLSearchParams();
-  formData.append("grant_type", "password");
-  formData.append("username", username.value);
-  formData.append("password", password.value);
-
-  fetch(LOGIN_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formData.toString()
-  })
-    .then(r => r.json())
-    .then(d => {
-      if (!d.access_token) {
-        loginError.innerText = "Invalid credentials";
-        return;
-      }
-      token = d.access_token;
-      localStorage.setItem("access_token", token);
-      showApp();
-    });
-}
-
-function showApp() {
-  loginBox.classList.add("hidden");
-  app.classList.remove("hidden");
-}
-
-/* ================= FETCH ================= */
-
-function authFetch(url, options = {}) {
-  options.headers = {
-    ...(options.headers || {}),
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json"
-  };
-  return fetch(url, options);
-}
-
-/* ================= START JOB ================= */
-
-function startJob() {
-  if (poller) {
-    clearInterval(poller);
-    poller = null;
-  }
-
-  const payload = {
-    product_idea: product_idea.value,
-    domain: domain.value,
-    target_audience: {
-      primary: audience_primary.value.split("\n").filter(Boolean),
-      secondary: audience_secondary.value.split("\n").filter(Boolean)
-    },
-    documentation_objective: objective.value,
-    regulatory_context: regulatory.value.split("\n").filter(Boolean)
-  };
-
-  status.innerText = "Starting workflow…";
-
-  authFetch(`${WORKFLOW_API}/start`, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  })
-    .then(r => r.json())
-    .then(d => {
-      jobId = d.job_id;
-      status.innerText = `Workflow started (Job ID: ${jobId})`;
-
-      // ✅ Immediate fetch so status never stays Idle
-      fetchStatus();
-
-      // ✅ Single poller only
-      poller = setInterval(fetchStatus, 3000);
-    });
-}
-
-/* ================= STATUS ================= */
-
-function fetchStatus() {
-  if (!jobId) return;
-
-  authFetch(`${WORKFLOW_API}/${jobId}/status`)
-    .then(r => r.json())
-    .then(updateUI)
-    .catch(() => {
-      status.innerText = "Error fetching status";
-    });
-}
-
-function updateUI(data) {
-  if (!data || !data.current_step) return;
-
-  if (data.current_step === "completed") {
-    status.innerText = "Workflow completed ✅";
-
-    if (poller) {
-      clearInterval(poller);
-      poller = null;
+      fetch(LOGIN_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData.toString()
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (!d.access_token) {
+            loginError.innerText = "Invalid credentials";
+            return;
+          }
+          token = d.access_token;
+          localStorage.setItem("access_token", token);
+          showApp();
+        });
     }
-  } else {
-    status.innerText = "Current step: " + (LABELS[data.current_step] || data.current_step);
-  }
 
-  for (const step in data.steps) {
-    if (!created[step]) createStep(step);
-    updateStep(step, data.steps[step]);
-  }
-}
+    function showApp() {
+      loginBox.classList.add("hidden");
+      app.classList.remove("hidden");
+    }
 
-/* ================= STEPS ================= */
+    /* ================= FETCH ================= */
 
-function createStep(step) {
-  const box = document.createElement("div");
-  box.id = `step-${step}`;
-  box.className = "step pending";
+    function authFetch(url, options = {}) {
+      options.headers = {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      };
+      return fetch(url, options);
+    }
 
-  const header = document.createElement("div");
-  header.className = "header";
-  header.innerHTML = `<span>${LABELS[step] || step}</span><span id="state-${step}"></span>`;
+    /* ================= START JOB ================= */
 
-  const body = document.createElement("div");
-  body.id = `body-${step}`;
-  body.className = "body";
+    function startJob() {
+      if (poller) {
+        clearInterval(poller);
+        poller = null;
+      }
 
-  header.onclick = () => {
-    expanded[step] = !expanded[step];
-    body.style.display = expanded[step] ? "block" : "none";
-    if (expanded[step] && !cache[step]) fetchStep(step);
-  };
+      const payload = {
+        product_idea: product_idea.value,
+        domain: domain.value,
+        target_audience: {
+          primary: audience_primary.value.split("\n").filter(Boolean),
+          secondary: audience_secondary.value.split("\n").filter(Boolean)
+        },
+        documentation_objective: objective.value,
+        regulatory_context: regulatory.value.split("\n").filter(Boolean)
+      };
 
-  box.appendChild(header);
-  box.appendChild(body);
-  steps.appendChild(box);
-  created[step] = true;
-}
+      status.innerText = "Starting workflow…";
 
-function updateStep(step, state) {
-  document.getElementById(`step-${step}`).className = `step ${state}`;
-  document.getElementById(`state-${step}`).innerText = state;
-}
+      authFetch(`${WORKFLOW_API}/start`, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      })
+        .then(r => r.json())
+        .then(d => {
+          jobId = d.job_id;
+          status.innerText = `Workflow started (Job ID: ${jobId})`;
 
-function fetchStep(step) {
-  authFetch(`${WORKFLOW_API}/${jobId}/steps/${step}`)
-    .then(r => r.json())
-    .then(res => {
-      cache[step] = res;
-      renderStep(step);
-    });
-}
+          // ✅ Immediate fetch so status never stays Idle
+          fetchStatus();
 
-function renderStep(step) {
-  const body = document.getElementById(`body-${step}`);
-  const parsed = cache[step]?.data?.parsed_output;
-  body.innerHTML = parsed ? renderAny(parsed) : "<div>No output</div>";
-}
+          // ✅ Single poller only
+          poller = setInterval(fetchStatus, 3000);
+        });
+    }
 
-/* ================= GENERIC RENDERER ================= */
+    /* ================= STATUS ================= */
 
-function renderAny(value) {
-  if (Array.isArray(value)) {
-    return `<ul>${value.map(v => `<li>${renderAny(v)}</li>`).join("")}</ul>`;
-  }
+    function fetchStatus() {
+      if (!jobId) return;
 
-  if (typeof value === "object" && value !== null) {
-    return Object.entries(value)
-      .map(([k, v]) => `
+      authFetch(`${WORKFLOW_API}/${jobId}/status`)
+        .then(r => r.json())
+        .then(updateUI)
+        .catch(() => {
+          status.innerText = "Error fetching status";
+        });
+    }
+
+    function updateUI(data) {
+      if (!data || !data.current_step) return;
+
+      if (data.current_step === "completed") {
+        status.innerText = "Workflow completed ✅";
+
+        if (poller) {
+          clearInterval(poller);
+          poller = null;
+        }
+      } else {
+        status.innerText = "Current step: " + (LABELS[data.current_step] || data.current_step);
+      }
+
+      for (const step in data.steps) {
+        if (!created[step]) createStep(step);
+        updateStep(step, data.steps[step]);
+      }
+    }
+
+    /* ================= STEPS ================= */
+
+    function createStep(step) {
+      const box = document.createElement("div");
+      box.id = `step-${step}`;
+      box.className = "step pending";
+
+      const header = document.createElement("div");
+      header.className = "header";
+      header.innerHTML = `<span>${LABELS[step] || step}</span><span id="state-${step}"></span>`;
+
+      const body = document.createElement("div");
+      body.id = `body-${step}`;
+      body.className = "body";
+
+      header.onclick = () => {
+        expanded[step] = !expanded[step];
+        body.style.display = expanded[step] ? "block" : "none";
+        if (expanded[step] && !cache[step]) fetchStep(step);
+      };
+
+      box.appendChild(header);
+      box.appendChild(body);
+      steps.appendChild(box);
+      created[step] = true;
+    }
+
+    function updateStep(step, state) {
+      document.getElementById(`step-${step}`).className = `step ${state}`;
+      document.getElementById(`state-${step}`).innerText = state;
+    }
+
+    function fetchStep(step) {
+      authFetch(`${WORKFLOW_API}/${jobId}/steps/${step}`)
+        .then(r => r.json())
+        .then(res => {
+          cache[step] = res;
+          renderStep(step);
+        });
+    }
+
+    function renderStep(step) {
+      const body = document.getElementById(`body-${step}`);
+      const parsed = cache[step]?.data?.parsed_output;
+      body.innerHTML = parsed ? renderAny(parsed) : "<div>No output</div>";
+    }
+
+    /* ================= GENERIC RENDERER ================= */
+
+    function renderAny(value) {
+      if (Array.isArray(value)) {
+        return `<ul>${value.map(v => `<li>${renderAny(v)}</li>`).join("")}</ul>`;
+      }
+
+      if (typeof value === "object" && value !== null) {
+        return Object.entries(value)
+          .map(([k, v]) => `
         <div class="section">
           <div class="section-title">${toTitle(k)}</div>
           ${renderAny(v)}
         </div>
       `)
-      .join("");
-  }
+          .join("");
+      }
 
-  return `<p>${value}</p>`;
-}
+      return `<p>${value}</p>`;
+    }
 
-function toTitle(text) {
-  return text.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
-</script>
+    function toTitle(text) {
+      return text.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+  </script>
 
 </body>
+
 </html>

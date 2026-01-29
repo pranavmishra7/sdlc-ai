@@ -13,12 +13,6 @@
       background: #fafafa;
     }
 
-    h2,
-    h3,
-    h4 {
-      margin-top: 24px;
-    }
-
     textarea,
     input {
       width: 100%;
@@ -91,10 +85,6 @@
       margin-bottom: 6px;
     }
 
-    p {
-      margin: 6px 0;
-    }
-
     .error {
       color: red;
       margin-top: 10px;
@@ -123,47 +113,45 @@
 
     <div class="section">
       <div class="section-title">Product Idea</div>
-      <textarea id="product_idea" rows="4">
+      <textarea id="product_idea" rows="3">
 Create structured, client-facing documentation for a financial investment solutions application.
     </textarea>
     </div>
 
     <div class="section">
       <div class="section-title">Domain</div>
-      <input id="domain" value="Financial Services – Investment Products" />
+      <input id="domain" value="Financial Services – Investment Products and Portfolio Management" />
     </div>
 
     <div class="section">
       <div class="section-title">Primary Audience (one per line)</div>
-      <textarea id="audience_primary" rows="3">
-Financial Advisors
-Wealth Management Consultants
-Investment Analysts
+      <textarea id="audience_primary" rows="4">
+Retail investors
+Relationship managers
     </textarea>
     </div>
 
     <div class="section">
       <div class="section-title">Secondary Audience (one per line)</div>
       <textarea id="audience_secondary" rows="3">
-Compliance Officers
-IT Support Staff
-End Clients
+Compliance teams
+Operations teams
     </textarea>
     </div>
 
     <div class="section">
-      <div class="section-title">Codumentation Objective</div>
-      <textarea id="objective" rows="3">Provide clear, comprehensive documentation to help users understand, implement, and comply with the investment solutions offered by the application without offering financial advice.
+      <div class="section-title">Documentation Objective</div>
+      <textarea id="objective" rows="3">
+Provide clear, accurate, regulator-safe documentation without offering financial advice.
     </textarea>
     </div>
 
     <div class="section">
       <div class="section-title">Regulatory Constraints (one per line)</div>
       <textarea id="regulatory" rows="3">
-SEC Regulations
-FINRA Guidelines
-GDPR Compliance
-MiFID II Requirements
+No financial advice
+No performance guarantees
+Regulated financial environment
     </textarea>
     </div>
 
@@ -192,12 +180,12 @@ MiFID II Requirements
     const cache = {};
 
     const LABELS = {
-      intake: "Problem Statement",
-      scope: "Scope Definition",
+      intake: "Problem Definition",
+      scope: "Scope",
       requirements: "Requirements",
       architecture: "Architecture",
-      estimation: "Effort & Timeline",
-      risk: "Risk Analysis",
+      estimation: "Estimation",
+      risk: "Risk",
       sow: "Statement of Work"
     };
 
@@ -206,15 +194,15 @@ MiFID II Requirements
     if (token) showApp();
 
     function login() {
-      const formData = new URLSearchParams();
-      formData.append("grant_type", "password");
-      formData.append("username", username.value);
-      formData.append("password", password.value);
+      const form = new URLSearchParams();
+      form.append("grant_type", "password");
+      form.append("username", username.value);
+      form.append("password", password.value);
 
       fetch(LOGIN_API, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData.toString()
+        body: form.toString()
       })
         .then(r => r.json())
         .then(d => {
@@ -236,21 +224,20 @@ MiFID II Requirements
     /* ================= FETCH ================= */
 
     function authFetch(url, options = {}) {
-      options.headers = {
-        ...(options.headers || {}),
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      };
-      return fetch(url, options);
+      return fetch(url, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
     }
 
     /* ================= START JOB ================= */
 
     function startJob() {
-      if (poller) {
-        clearInterval(poller);
-        poller = null;
-      }
+      if (poller) clearInterval(poller);
 
       const payload = {
         product_idea: product_idea.value,
@@ -272,12 +259,8 @@ MiFID II Requirements
         .then(r => r.json())
         .then(d => {
           jobId = d.job_id;
-          status.innerText = `Workflow started (Job ID: ${jobId})`;
-
-          // ✅ Immediate fetch so status never stays Idle
-          fetchStatus();
-
-          // ✅ Single poller only
+          status.innerText = `Workflow started (${jobId})`;
+          fetchStatus();                      // 🔑 immediate fetch
           poller = setInterval(fetchStatus, 3000);
         });
     }
@@ -289,29 +272,25 @@ MiFID II Requirements
 
       authFetch(`${WORKFLOW_API}/${jobId}/status`)
         .then(r => r.json())
-        .then(updateUI)
-        .catch(() => {
-          status.innerText = "Error fetching status";
-        });
+        .then(updateUI);
     }
 
     function updateUI(data) {
       if (!data || !data.current_step) return;
 
-      if (data.current_step === "completed") {
-        status.innerText = "Workflow completed ✅";
-
-        if (poller) {
-          clearInterval(poller);
-          poller = null;
-        }
-      } else {
-        status.innerText = "Current step: " + (LABELS[data.current_step] || data.current_step);
-      }
+      status.innerText =
+        data.current_step === "completed"
+          ? "Workflow completed ✅"
+          : "Current step: " + (LABELS[data.current_step] || data.current_step);
 
       for (const step in data.steps) {
         if (!created[step]) createStep(step);
         updateStep(step, data.steps[step]);
+      }
+
+      if (data.current_step === "completed" && poller) {
+        clearInterval(poller);
+        poller = null;
       }
     }
 
@@ -358,17 +337,16 @@ MiFID II Requirements
 
     function renderStep(step) {
       const body = document.getElementById(`body-${step}`);
-      const parsed = cache[step]?.data?.parsed_output;
+      const parsed = cache[step]?.data?.parsed;   // ✅ correct key
       body.innerHTML = parsed ? renderAny(parsed) : "<div>No output</div>";
     }
 
-    /* ================= GENERIC RENDERER ================= */
+    /* ================= GENERIC RENDER ================= */
 
     function renderAny(value) {
       if (Array.isArray(value)) {
         return `<ul>${value.map(v => `<li>${renderAny(v)}</li>`).join("")}</ul>`;
       }
-
       if (typeof value === "object" && value !== null) {
         return Object.entries(value)
           .map(([k, v]) => `
@@ -376,10 +354,8 @@ MiFID II Requirements
           <div class="section-title">${toTitle(k)}</div>
           ${renderAny(v)}
         </div>
-      `)
-          .join("");
+      `).join("");
       }
-
       return `<p>${value}</p>`;
     }
 

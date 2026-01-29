@@ -336,7 +336,7 @@ function fetchStep(step) {
 
 function renderStep(step) {
   const body = document.getElementById(`body-${step}`);
-  const data = cache[step]?.data?.parsed;
+  const data = cache[step]?.data?.parsed_output; // ✅ FIX
   if (!data) {
     body.innerHTML = "<div>No output</div>";
     return;

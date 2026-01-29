@@ -12,8 +12,8 @@
       background: #fafafa;
     }
 
-    h2, h3 {
-      margin-top: 30px;
+    h2, h3, h4 {
+      margin-top: 24px;
     }
 
     textarea, input {
@@ -72,6 +72,8 @@
     ul { padding-left: 20px; }
     li { margin-bottom: 6px; }
 
+    p { margin: 6px 0; }
+
     .error {
       color: red;
       margin-top: 10px;
@@ -98,50 +100,34 @@
 
 <div id="app" class="hidden">
 
-  <!-- INPUT FORM -->
-
   <div class="section">
     <div class="section-title">Product Idea</div>
-    <textarea id="product_idea" rows="4">
-Create structured, client-facing documentation for a financial investment solutions application.
-    </textarea>
+    <textarea id="product_idea" rows="4"></textarea>
   </div>
 
   <div class="section">
     <div class="section-title">Domain</div>
-    <input id="domain" value="Financial Services – Investment Products" />
+    <input id="domain" />
   </div>
 
   <div class="section">
-    <div class="section-title">Primary Audience (one per line)</div>
-    <textarea id="audience_primary" rows="3">
-Retail investors
-Relationship managers
-    </textarea>
+    <div class="section-title">Primary Audience</div>
+    <textarea id="audience_primary" rows="3"></textarea>
   </div>
 
   <div class="section">
-    <div class="section-title">Secondary Audience (one per line)</div>
-    <textarea id="audience_secondary" rows="3">
-Compliance teams
-Operations teams
-    </textarea>
+    <div class="section-title">Secondary Audience</div>
+    <textarea id="audience_secondary" rows="3"></textarea>
   </div>
 
   <div class="section">
-    <div class="section-title">Documentation Objective</div>
-    <textarea id="objective" rows="3">
-Provide clear, regulator-safe documentation without offering financial advice.
-    </textarea>
+    <div class="section-title">Objective</div>
+    <textarea id="objective" rows="3"></textarea>
   </div>
 
   <div class="section">
-    <div class="section-title">Regulatory Constraints (one per line)</div>
-    <textarea id="regulatory" rows="3">
-No financial advice
-No performance guarantees
-Regulated financial environment
-    </textarea>
+    <div class="section-title">Regulatory Constraints</div>
+    <textarea id="regulatory" rows="3"></textarea>
   </div>
 
   <br>
@@ -169,7 +155,7 @@ const expanded = {};
 const cache = {};
 
 const LABELS = {
-  intake: "Problem Definition",
+  intake: "Problem Statement",
   scope: "Scope Definition",
   requirements: "Requirements",
   architecture: "Architecture",
@@ -190,10 +176,7 @@ function login() {
 
   fetch(LOGIN_API, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "accept": "application/json"
-    },
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: formData.toString()
   })
     .then(r => r.json())
@@ -202,13 +185,9 @@ function login() {
         loginError.innerText = "Invalid credentials";
         return;
       }
-
       token = d.access_token;
       localStorage.setItem("access_token", token);
       showApp();
-    })
-    .catch(() => {
-      loginError.innerText = "Login failed";
     });
 }
 
@@ -217,23 +196,15 @@ function showApp() {
   app.classList.remove("hidden");
 }
 
-/* ================= FETCH WRAPPER ================= */
+/* ================= FETCH ================= */
 
 function authFetch(url, options = {}) {
   options.headers = {
     ...(options.headers || {}),
-    "Authorization": `Bearer ${token}`,
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json"
   };
-
-  return fetch(url, options).then(r => {
-    if (r.status === 401) {
-      alert("Session expired. Please login again.");
-      localStorage.removeItem("access_token");
-      location.reload();
-    }
-    return r;
-  });
+  return fetch(url, options);
 }
 
 /* ================= START JOB ================= */
@@ -247,10 +218,7 @@ function startJob() {
       secondary: audience_secondary.value.split("\n").filter(Boolean)
     },
     documentation_objective: objective.value,
-    regulatory_context: regulatory.value.split("\n").filter(Boolean),
-    output_format: {
-      style: "Professional, enterprise client-ready"
-    }
+    regulatory_context: regulatory.value.split("\n").filter(Boolean)
   };
 
   authFetch(`${WORKFLOW_API}/start`, {
@@ -261,7 +229,6 @@ function startJob() {
     .then(d => {
       jobId = d.job_id;
       status.innerText = `Job started (${jobId})`;
-      fetchStatus();
       poller = setInterval(fetchStatus, 3000);
     });
 }
@@ -285,17 +252,12 @@ function updateUI(data) {
     updateStep(step, data.steps[step]);
   }
 
-  if (data.current_step === "completed" && poller) {
-    clearInterval(poller);
-    poller = null;
-  }
+  if (data.current_step === "completed") clearInterval(poller);
 }
 
 /* ================= STEPS ================= */
 
 function createStep(step) {
-  const container = document.getElementById("steps");
-
   const box = document.createElement("div");
   box.id = `step-${step}`;
   box.className = "step pending";
@@ -316,7 +278,7 @@ function createStep(step) {
 
   box.appendChild(header);
   box.appendChild(body);
-  container.appendChild(box);
+  steps.appendChild(box);
   created[step] = true;
 }
 
@@ -336,66 +298,39 @@ function fetchStep(step) {
 
 function renderStep(step) {
   const body = document.getElementById(`body-${step}`);
-  const data = cache[step]?.data?.parsed_output; // ✅ FIX
-  if (!data) {
+  const parsed = cache[step]?.data?.parsed_output;
+  if (!parsed) {
     body.innerHTML = "<div>No output</div>";
     return;
   }
-  body.innerHTML = renderParsed(step, data);
+  body.innerHTML = renderAny(parsed);
 }
 
-/* ================= RENDERERS ================= */
+/* ================= GENERIC RENDERER (THE FIX) ================= */
 
-function renderParsed(step, d) {
-  switch (step) {
-    case "intake":
-      return section("Business Problem", [d.problem_statement.overview])
-        + section("Current Challenges", d.problem_statement.current_challenges)
-        + section("Business Impact", d.problem_statement.business_impact);
-
-    case "scope":
-      return section("In Scope", d.in_scope)
-        + section("Out of Scope", d.out_of_scope)
-        + section("Success Criteria", d.success_criteria);
-
-    case "requirements":
-      return section("Functional Requirements", d.functional_requirements)
-        + section("Non-Functional Requirements", d.non_functional_requirements)
-        + section("Constraints", d.constraints);
-
-    case "architecture":
-      return section("Architecture Overview", [d.architecture_overview])
-        + section("System Components", d.components)
-        + section("Data Flow", d.data_flow);
-
-    case "estimation":
-      return section("Effort Breakdown", d.effort_breakdown)
-        + section("Timeline", [d.timeline])
-        + section("Assumptions", d.assumptions)
-        + section("Risks", d.risks);
-
-    case "risk":
-      return section("Key Risks", d.risks)
-        + section("Mitigation Strategies", d.mitigations);
-
-    case "sow":
-      return section("Deliverables", d.deliverables)
-        + section("Milestones", d.milestones)
-        + section("Payment Terms", [d.payment_terms]);
-
-    default:
-      return "<pre>" + JSON.stringify(d, null, 2) + "</pre>";
+function renderAny(value) {
+  if (Array.isArray(value)) {
+    return `<ul>${value.map(v => `<li>${renderAny(v)}</li>`).join("")}</ul>`;
   }
+
+  if (typeof value === "object" && value !== null) {
+    return Object.entries(value)
+      .map(([k, v]) => `
+        <div class="section">
+          <div class="section-title">${toTitle(k)}</div>
+          ${renderAny(v)}
+        </div>
+      `)
+      .join("");
+  }
+
+  return `<p>${value}</p>`;
 }
 
-function section(title, items) {
-  if (!items || !items.length) return "";
-  return `
-    <div class="section">
-      <div class="section-title">${title}</div>
-      <ul>${items.map(i => `<li>${i}</li>`).join("")}</ul>
-    </div>
-  `;
+function toTitle(text) {
+  return text
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, c => c.toUpperCase());
 }
 </script>
 

@@ -1,39 +1,45 @@
 <!DOCTYPE html>
 <html>
-
 <head>
   <meta charset="UTF-8" />
   <title>SDLC AI</title>
 
   <style>
     body {
-      font-family: Arial;
+      font-family: Arial, sans-serif;
       margin: 40px;
-      max-width: 900px;
+      max-width: 1000px;
+      background: #fafafa;
     }
 
-    textarea#idea {
+    h2, h3 {
+      margin-top: 30px;
+    }
+
+    textarea, input {
       width: 100%;
-      height: 80px;
+      padding: 8px;
+      margin-top: 6px;
+      box-sizing: border-box;
+    }
+
+    button {
+      padding: 10px 18px;
+      font-size: 14px;
+      cursor: pointer;
     }
 
     .step {
-      margin: 10px 0;
-      padding: 10px;
+      margin: 14px 0;
+      padding: 12px;
       border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #fff;
     }
 
-    .pending {
-      background: #eee;
-    }
-
-    .running {
-      background: #fff3cd;
-    }
-
-    .completed {
-      background: #d4edda;
-    }
+    .pending { background: #f5f5f5; }
+    .running { background: #fff3cd; }
+    .completed { background: #e8f5e9; }
 
     .header {
       display: flex;
@@ -44,15 +50,15 @@
 
     .body {
       display: none;
-      margin-top: 10px;
+      margin-top: 12px;
+      padding: 14px;
       background: #111;
       color: #ddd;
-      padding: 14px;
       border-radius: 4px;
     }
 
     .section {
-      margin-top: 14px;
+      margin-top: 16px;
     }
 
     .section-title {
@@ -66,312 +72,262 @@
     }
 
     li {
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
 
     .meta {
-      color: #8bc34a;
       font-size: 13px;
+      color: #8bc34a;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 
 <body>
 
-  <h2>SDLC AI</h2>
+<h2>SDLC AI – Client Documentation Generator</h2>
 
-  <textarea id="idea">Mobile app for financial investments</textarea><br><br>
-  <button onclick="startJob()">Start Job</button>
+<!-- INPUT FORM -->
 
-  <h3>Status</h3>
-  <div id="status">Idle</div>
+<div class="section">
+  <div class="section-title">Product Idea</div>
+  <textarea id="product_idea" rows="4">
+Create structured, client-facing documentation for a financial investment solutions application.
+  </textarea>
+</div>
 
-  <h3>Workflow</h3>
-  <div id="steps"></div>
+<div class="section">
+  <div class="section-title">Domain</div>
+  <input id="domain" value="Financial Services – Investment Products" />
+</div>
 
-  <script>
-    const API = "/api/workflows";
-    let jobId = null;
-    let poller = null;
+<div class="section">
+  <div class="section-title">Primary Audience (one per line)</div>
+  <textarea id="audience_primary" rows="3">
+Retail investors
+Relationship managers
+  </textarea>
+</div>
 
-    const created = {};
-    const expanded = {};
-    const cache = {};
+<div class="section">
+  <div class="section-title">Secondary Audience (one per line)</div>
+  <textarea id="audience_secondary" rows="3">
+Compliance teams
+Operations teams
+  </textarea>
+</div>
 
-    const LABELS = {
-      intake: "Problem Statement",
-      scope: "Scope Definition",
-      requirements: "Requirements Breakdown",
-      architecture: "Architecture Design",
-      estimation: "Effort Estimation",
-      risk: "Risk Analysis",
-      sow: "Statement of Work"
-    };
+<div class="section">
+  <div class="section-title">Documentation Objective</div>
+  <textarea id="objective" rows="3">
+Provide clear, regulator-safe documentation without offering financial advice.
+  </textarea>
+</div>
 
-    /* ---------------- START ---------------- */
+<div class="section">
+  <div class="section-title">Regulatory Constraints (one per line)</div>
+  <textarea id="regulatory" rows="3">
+No financial advice
+No performance guarantees
+Regulated financial environment
+  </textarea>
+</div>
 
-    function startJob() {
-      fetch(`${API}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_idea: idea.value })
-      })
-        .then(r => r.json())
-        .then(d => {
-          jobId = d.job_id;
-          status.innerText = `Job started (${jobId})`;
-          fetchStatus();
-          poller = setInterval(fetchStatus, 3000);
-        });
+<br>
+<button onclick="startJob()">Start SDLC Job</button>
+
+<h3>Status</h3>
+<div id="status">Idle</div>
+
+<h3>Workflow</h3>
+<div id="steps"></div>
+
+<script>
+const API = "/api/workflows";
+let jobId = null;
+let poller = null;
+
+const created = {};
+const expanded = {};
+const cache = {};
+
+const LABELS = {
+  intake: "Problem Definition",
+  scope: "Scope Definition",
+  requirements: "Requirements",
+  architecture: "Architecture",
+  estimation: "Effort & Timeline",
+  risk: "Risk Analysis",
+  sow: "Statement of Work"
+};
+
+/* ---------------- START JOB ---------------- */
+
+function startJob() {
+  const payload = {
+    product_idea: product_idea.value,
+    domain: domain.value,
+    target_audience: {
+      primary: audience_primary.value.split("\n").filter(Boolean),
+      secondary: audience_secondary.value.split("\n").filter(Boolean)
+    },
+    documentation_objective: objective.value,
+    regulatory_context: regulatory.value.split("\n").filter(Boolean),
+    output_format: {
+      style: "Professional, enterprise client-ready"
     }
+  };
 
-    /* ---------------- STATUS ---------------- */
+  fetch(`${API}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })
+    .then(r => r.json())
+    .then(d => {
+      jobId = d.job_id;
+      status.innerText = `Job started (${jobId})`;
+      fetchStatus();
+      poller = setInterval(fetchStatus, 3000);
+    });
+}
 
-    function fetchStatus() {
-      fetch(`${API}/${jobId}/status`)
-        .then(r => r.json())
-        .then(updateUI);
-    }
+/* ---------------- STATUS ---------------- */
 
-    function updateUI(data) {
-      status.innerText =
-        data.current_step === "completed"
-          ? "Workflow completed ✅"
-          : "Current step: " + LABELS[data.current_step];
+function fetchStatus() {
+  fetch(`${API}/${jobId}/status`)
+    .then(r => r.json())
+    .then(updateUI);
+}
 
-      for (const step in data.steps) {
-        if (!created[step]) createStep(step);
-        updateStep(step, data.steps[step]);
-      }
+function updateUI(data) {
+  status.innerText =
+    data.current_step === "completed"
+      ? "Workflow completed ✅"
+      : "Current step: " + LABELS[data.current_step];
 
-      if (data.current_step === "completed" && poller) {
-        clearInterval(poller);
-        poller = null;
-      }
-    }
+  for (const step in data.steps) {
+    if (!created[step]) createStep(step);
+    updateStep(step, data.steps[step]);
+  }
 
-    /* ---------------- STEP UI ---------------- */
+  if (data.current_step === "completed" && poller) {
+    clearInterval(poller);
+    poller = null;
+  }
+}
 
-    function createStep(step) {
-      const container = document.getElementById("steps");
+/* ---------------- STEP UI ---------------- */
 
-      const box = document.createElement("div");
-      box.id = `step-${step}`;
-      box.className = "step pending";
+function createStep(step) {
+  const container = document.getElementById("steps");
 
-      const header = document.createElement("div");
-      header.className = "header";
-      header.innerHTML = `<span>${LABELS[step]}</span><span id="state-${step}"></span>`;
+  const box = document.createElement("div");
+  box.id = `step-${step}`;
+  box.className = "step pending";
 
-      const body = document.createElement("div");
-      body.id = `body-${step}`;
-      body.className = "body";
+  const header = document.createElement("div");
+  header.className = "header";
+  header.innerHTML = `<span>${LABELS[step]}</span><span id="state-${step}"></span>`;
 
-      header.onclick = () => {
-        expanded[step] = !expanded[step];
-        body.style.display = expanded[step] ? "block" : "none";
-        if (expanded[step] && !cache[step]) fetchStep(step);
-      };
+  const body = document.createElement("div");
+  body.id = `body-${step}`;
+  body.className = "body";
 
-      box.appendChild(header);
-      box.appendChild(body);
-      container.appendChild(box);
-      created[step] = true;
-    }
+  header.onclick = () => {
+    expanded[step] = !expanded[step];
+    body.style.display = expanded[step] ? "block" : "none";
+    if (expanded[step] && !cache[step]) fetchStep(step);
+  };
 
-    /* ---------------- STEP STATE ---------------- */
+  box.appendChild(header);
+  box.appendChild(body);
+  container.appendChild(box);
+  created[step] = true;
+}
 
-    function updateStep(step, state) {
-      document.getElementById(`step-${step}`).className = `step ${state}`;
-      document.getElementById(`state-${step}`).innerText = state;
-    }
+function updateStep(step, state) {
+  document.getElementById(`step-${step}`).className = `step ${state}`;
+  document.getElementById(`state-${step}`).innerText = state;
+}
 
-    /* ---------------- STEP DATA ---------------- */
+/* ---------------- STEP DATA ---------------- */
 
-    function fetchStep(step) {
-      fetch(`${API}/${jobId}/steps/${step}`)
-        .then(r => r.json())
-        .then(res => {
-          cache[step] = res;
-          renderStep(step);
-        });
-    }
+function fetchStep(step) {
+  fetch(`${API}/${jobId}/steps/${step}`)
+    .then(r => r.json())
+    .then(res => {
+      cache[step] = res;
+      renderStep(step);
+    });
+}
 
-    /*render steps*/
+function renderStep(step) {
+  const body = document.getElementById(`body-${step}`);
+  const data = cache[step]?.data?.parsed;
 
-    function renderStep(step) {
-      const body = document.getElementById(`body-${step}`);
-      const stepData = cache[step]?.data;
+  if (!data) {
+    body.innerHTML = "<div>No output</div>";
+    return;
+  }
 
-      const raw = stepData?.raw_output;
-      const started = stepData?.started_at;
-      const completed = stepData?.completed_at;
-      const status = cache[step]?.status;
+  body.innerHTML = renderParsed(step, data);
+}
 
-      if (!raw) {
-        body.innerHTML = "<div class='section'>No output</div>";
-        return;
-      }
+/* ---------------- RENDERERS ---------------- */
 
-      const meta = `
-    <div class="meta">
-      Status: ${status}<br>
-      Started: ${started}<br>
-      Completed: ${completed}
-    </div>
-  `;
+function renderParsed(step, d) {
+  switch (step) {
+    case "intake":
+      return section("Business Problem", [d.problem_statement.overview])
+        + section("Current Challenges", d.problem_statement.current_challenges)
+        + section("Business Impact", d.problem_statement.business_impact);
 
-      // Intake → human readable
-      if (step === "intake") {
-        body.innerHTML = meta + renderHumanReadable(raw);
-        return;
-      }
+    case "scope":
+      return section("In Scope", d.in_scope)
+        + section("Out of Scope", d.out_of_scope)
+        + section("Success Criteria", d.success_criteria);
 
-      // Other steps → safe text / JSON render
-      const cleaned = stripMarkdownFences(raw);
-      const prettyJson = safePrettyJson(cleaned);
-      const content = prettyJson ?? cleaned;
+    case "requirements":
+      return section("Functional Requirements", d.functional_requirements)
+        + section("Non-Functional Requirements", d.non_functional_requirements)
+        + section("Constraints", d.constraints);
 
-      body.innerHTML = `
-    ${meta}
+    case "architecture":
+      return section("Architecture Overview", [d.architecture_overview])
+        + section("System Components", d.components)
+        + section("Data Flow", d.data_flow);
+
+    case "estimation":
+      return section("Effort Breakdown", d.effort_breakdown)
+        + section("Timeline", [d.timeline])
+        + section("Assumptions", d.assumptions)
+        + section("Risks", d.risks);
+
+    case "risk":
+      return section("Key Risks", d.risks)
+        + section("Mitigation Strategies", d.mitigations);
+
+    case "sow":
+      return section("Deliverables", d.deliverables)
+        + section("Milestones", d.milestones)
+        + section("Payment Terms", [d.payment_terms]);
+
+    default:
+      return "<pre>" + JSON.stringify(d, null, 2) + "</pre>";
+  }
+}
+
+function section(title, items) {
+  if (!items || !items.length) return "";
+  return `
     <div class="section">
-      <pre style="white-space: pre-wrap;">${escapeHtml(content)}</pre>
+      <div class="section-title">${title}</div>
+      <ul>${items.map(i => `<li>${i}</li>`).join("")}</ul>
     </div>
   `;
-    }
-
-
-    /* ---------------- HUMAN OUTPUT ---------------- */
-    function cleanText(text) {
-      return text
-        .replace(/```[\s\S]*?```/g, "")          // remove code fences
-        .replace(/Status:.*?\n/gi, "")
-        .replace(/Started:.*?\n/gi, "")
-        .replace(/Completed:.*?\n/gi, "")
-        .replace(/[{}\[\]"]/g, "")               // remove JSON symbols
-        .replace(/\\n/g, "\n")
-        .replace(/\s+/g, " ")
-        .trim();
-    }
-
-    function extractSection(source, startKey, endKeys = []) {
-      const endPattern = endKeys.length
-        ? endKeys.join("|")
-        : "$";
-
-      const regex = new RegExp(
-        startKey + "\\s*(.*?)(?=" + endPattern + "|$)",
-        "i"
-      );
-
-      const match = source.match(regex);
-      return match ? match[1].trim() : "";
-    }
-
-    function toBullets(text) {
-      return text
-        .split(/[,•\n]/)
-        .map(t => t.trim())
-        .filter(t => t.length > 3)
-        .map(t => `<li>${t}</li>`)
-        .join("");
-    }
-
-    function renderHumanReadable(rawText) {
-      const text = cleanText(rawText);
-
-      const problem = extractSection(
-        text,
-        "problem",
-        ["causes", "effects", "target audience"]
-      );
-
-      const causes = extractSection(
-        text,
-        "causes",
-        ["effects", "target audience"]
-      );
-
-      const effects = extractSection(
-        text,
-        "effects",
-        ["target audience"]
-      );
-
-      const target = extractSection(
-        text,
-        "target audience"
-      );
-
-      return `
-    ${problem ? `
-      <div class="section">
-        <div class="section-title">Problem</div>
-        <div>${problem}</div>
-      </div>` : ""}
-
-    ${causes ? `
-      <div class="section">
-        <div class="section-title">Causes</div>
-        <ul>${toBullets(causes)}</ul>
-      </div>` : ""}
-
-    ${effects ? `
-      <div class="section">
-        <div class="section-title">Effects</div>
-        <ul>${toBullets(effects)}</ul>
-      </div>` : ""}
-
-    ${target ? `
-      <div class="section">
-        <div class="section-title">Target Audience</div>
-        <div>${target}</div>
-      </div>` : ""}
-  `;
-    }
-
-    function extractJsonFromText(text) {
-      // Remove ```json ... ``` or ``` ... ```
-      const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-      if (fenced) {
-        return fenced[1].trim();
-      }
-      return null;
-    }
-
-    function prettyPrintJson(jsonText) {
-      try {
-        const obj = JSON.parse(jsonText);
-        return JSON.stringify(obj, null, 2);
-      } catch {
-        return null;
-      }
-    }
-
-    function stripMarkdownFences(text) {
-      return text
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim();
-    }
-
-    function safePrettyJson(text) {
-      try {
-        const obj = JSON.parse(text);
-        return JSON.stringify(obj, null, 2);
-      } catch {
-        return null;
-      }
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement("div");
-      div.innerText = text;
-      return div.innerHTML;
-    }
-
-  </script>
+}
+</script>
 
 </body>
-
 </html>

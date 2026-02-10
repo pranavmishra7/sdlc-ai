@@ -8,37 +8,43 @@ def run_architecture(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    You are preparing a **Solution Architecture Overview**
-    for a regulated financial services client.
+    Act as a senior enterprise solution architect designing a logical architecture for a regulated financial services client.
 
-    Audience includes:
-    - Enterprise architects
-    - Security and compliance teams
-    - Business stakeholders
+    Your task is to generate a structured Solution Architecture Overview that explains system boundaries, major components, and data flows at an enterprise level.
 
     STRICT RULES:
-    - Output ONLY valid JSON
-    - No markdown, no explanations
-    - Avoid vendor or technology bias unless necessary
-    - Focus on logical components and responsibilities
-    - Do NOT describe automated investment decision-making
-    - Frame analytics as insight and decision support
+    - Output MUST be valid JSON only
+    - No markdown, commentary, or explanations
+    - No placeholders or generic filler
+    - No automated investment decision-making
+    - Analytics must be described as insight or decision-support only
+    - Avoid vendor, cloud, or product bias unless architecturally unavoidable
+    - Use business-relevant language understandable by both technical and non-technical stakeholders
 
-    Return EXACTLY this structure:
+    Return EXACTLY the following JSON structure:
 
     {{
-    "architecture_overview": "High-level description of the solution architecture and its purpose",
-    "components": [
-        "Major logical components and their responsibilities"
-    ],
-    "data_flow": [
-        "Key data flows described in business-relevant terms"
-    ],
-    "technology_assumptions": [
-        "Assumptions that materially influence architectural decisions"
-    ]
+      "architecture_overview": "Concise description of the architecture purpose, scope, and guiding principles",
+      "components": [
+        "Component name – primary responsibility",
+        "Component name – primary responsibility"
+      ],
+      "data_flow": [
+        "Clear, business-relevant description of how data moves between components",
+        "Focus on data ownership, validation, and handoff points"
+      ],
+      "technology_assumptions": [
+        "Architecturally significant assumption that impacts design or delivery",
+        "Avoid speculative or implementation-level details"
+      ]
     }}
 
+    CONTENT QUALITY REQUIREMENTS:
+    - Components must represent logical system boundaries
+    - Data flows must describe what data moves and why, not protocols
+    - Assumptions must be explicit, realistic, and delivery-impacting
+    - All content must be suitable for regulated financial environments
+    
     CONTEXT:
     {context}
     """

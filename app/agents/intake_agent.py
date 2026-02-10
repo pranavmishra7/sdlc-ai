@@ -11,50 +11,60 @@ def run_intake(product_idea: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    You are a senior management consultant preparing a **Discovery Summary**
-    for a regulated financial services client.
+    Create a precise financial services discovery summary in JSON format for a senior management consultant.
 
-    This content is intended for:
-    - Executive stakeholders
-    - Compliance and risk teams
-    - Program sponsors
+    The summary must:
 
-    STRICT RULES:
-    - Output ONLY valid JSON
-    - No markdown, no explanations
-    - No speculative metrics (e.g. revenue %, user counts)
-    - No promises of outcomes or performance
-    - Avoid phrases like "the system will" or "automated decision-making"
-    - Use neutral, professional, client-facing language
+    1. Clearly articulate the business problem at an executive level
+    2. Detail specific operational challenges using business language only
+    3. Outline material business impacts based on observed or documented issues
+    4. Define primary and secondary user roles
+    5. List critical assumptions and dependencies
+    6. Explicitly state out-of-scope items to establish clear boundaries
 
-    Return EXACTLY this structure:
-
+    JSON STRUCTURE REQUIREMENTS:
     {{
     "problem_statement": {{
-        "overview": "Clear, executive-level articulation of the business problem",
+        "overview": "Concise executive-level problem description (1–2 sentences)",
         "current_challenges": [
-        "Specific, observable operational or business challenges"
+        "Operational pain point stated in non-technical, business language",
+        "Maximum 5 items"
         ],
         "business_impact": [
-        "Material impacts expressed in business or operational terms"
+        "Observed business impact (cost, risk, delay, compliance, efficiency)",
+        "No speculative or future projections"
         ]
     }},
     "target_users": {{
         "primary_users": [
-        "Clearly defined business or operational roles"
+        "Core business roles directly affected",
+        "Limit to 3–5 clearly defined positions"
         ],
         "secondary_users": [
-        "Governance, oversight, or supporting roles"
+        "Oversight, governance, or control functions",
+        "Maximum 3 roles"
         ]
     }},
     "assumptions": [
-        "Operational or dependency assumptions that influence scope or delivery"
+        "Critical dependency or condition",
+        "Maximum 3 items"
     ],
     "out_of_scope": [
-        "Explicit exclusions to avoid ambiguity or scope expansion"
+        "Explicitly excluded capability or responsibility",
+        "Neutral phrasing (no negative or defensive language)",
+        "3–5 clear exclusions"
     ]
     }}
 
+    STRICT FORMATTING RULES:
+    - Output MUST be valid JSON only
+    - No markdown, explanations, or comments
+    - No placeholder text (e.g., TBD, various, to be confirmed)
+    - No technical jargon, system names, or implementation details
+    - Key names must match exactly as specified
+    - Double quotes for all strings
+    - Proper JSON escaping
+    
     CONTEXT:
     {product_idea}
     """

@@ -1,0 +1,32 @@
+Generate a structured JSON output describing a solution architecture for a regulated financial services client. Adhere strictly to the following requirements:
+
+- Target audience: Enterprise architects, security/compliance teams, business stakeholders
+- Format: Pure JSON only (no markdown, explanations, or decorative formatting)
+- Content focus: Logical components, data flows, and technology assumptions
+- Restrictions:
+  - No automated investment decision-making descriptions
+  - Present analytics as insight/decision support tools
+  - Avoid vendor/technology bias unless architecturally essential
+
+Structure the output EXACTLY as:
+
+{
+"architecture_overview": "[Concise description of architecture purpose and high-level approach]",
+"components": [
+    "[Component 1 name and responsibility]",
+    "[Component 2 name and responsibility]",
+    "[Additional components as needed]"
+],
+"data_flow": [
+    "[Business-relevant data flow description 1]",
+    "[Business-relevant data flow description 2]",
+    "[Additional flows as needed]"
+],
+"technology_assumptions": [
+    "[Architecturally significant assumption 1]",
+    "[Architecturally significant assumption 2]",
+    "[Additional assumptions as needed]"
+]
+}
+
+Maintain professional tone while ensuring clarity for both technical and business audiences. All content must be SFW and appropriate for financial services.

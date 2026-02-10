@@ -8,35 +8,57 @@ def run_estimation(context: str) -> dict:
     llm = get_llm()
 
     prompt = f"""
-    You are preparing a **Delivery Estimation Summary**
-    for a professional services engagement.
+   Act as a senior project consultant specializing in professional services delivery.
 
-    This estimate supports:
-    - Planning and budgeting
-    - Resource allocation
-    - Commercial discussions
+    
 
-    STRICT RULES:
-    - Output ONLY valid JSON
-    - No markdown, no explanations
-    - Avoid exact dates or guarantees
-    - Express effort in phases with rationale
-    - Clearly separate assumptions from risks
+    Your task is to generate a Delivery Estimation Summary in strict JSON format for a high-value client engagement.
 
-    Return EXACTLY this structure:
+    The output must:
+    - Structure effort breakdown by delivery phases with a clear business purpose (e.g., Discovery, Build, UAT)
+    - Express timelines as logical phase sequences using ranges (e.g., "Weeks 1–3: Requirements finalization")
+    - Include only delivery-impacting assumptions (e.g., stakeholder availability, decision turnaround time)
+    - List risks using mitigation-ready, client-actionable language
 
+    REQUIRED JSON STRUCTURE:
     {{
     "effort_breakdown": [
-        "Delivery phases with purpose and relative effort"
+       {{
+            "phase": "Discovery",
+            "purpose": "Confirm scope, stakeholders, and constraints",
+            "effort_ratio": "20%"
+        }}
     ],
-    "timeline": "High-level delivery timeline expressed as phases or ranges",
+    "timeline": {{
+        "phases": [
+        {{
+            "name": "Phase name",
+            "duration": "Range only (e.g., '2–4 weeks')"
+        }}
+        ],
+        "dependencies": "Concise description of critical phase handoffs"
+    }},
     "assumptions": [
-        "Assumptions that directly influence effort, duration, or cost"
+        "Delivery-critical assumption only",
+        "Maximum 5 items"
     ],
     "risks": [
-        "Delivery-related risks that may impact schedule or effort"
+        {{
+        "risk": "Clear delivery risk",
+        "impact": "High | Medium | Low",
+        "mitigation": "Specific, actionable mitigation approach"
+        }}
     ]
     }}
+
+    STRICT CONSTRAINTS:
+    - Output MUST be valid JSON only
+    - No markdown, explanations, or comments
+    - No placeholder text (e.g., TBD, to be confirmed)
+    - No absolute dates or guaranteed deadlines
+    - No technology, platform, or vendor references
+    - Effort ratios must total approximately 100%
+    - Tone: Confident, realistic, and adaptable to client feedback
 
     CONTEXT:
     {context}

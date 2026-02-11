@@ -43,6 +43,7 @@ sudo apt install -y \
   xz-utils tk-dev ca-certificates curl
 
  ## after restarting vm 
+#if new clone python3 -m venv venv
  source .venv/bin/activate
  pip install -r requirements.txt
 
@@ -50,6 +51,8 @@ sudo apt install -y \
   export JWT_SECRET=change-me
   export ALGORITHM=HS256
   export DATABASE_URL=postgresql://neondb_owner:npg_X5fpqRK6Cawb@ep-bitter-field-ahc8s4ys-pooler.c-3.us-east-1.aws.neon.tech/sdlc_ai_prod?sslmode=require
+  sudo apt update
+  sudo apt install redis-server -y
 
   pkill -f celery
   redis run or sudo systemctl start redis-server

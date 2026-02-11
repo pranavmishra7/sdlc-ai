@@ -1,5 +1,6 @@
 from fastapi import Request, HTTPException, status
 from fastapi_limiter.depends import RateLimiter
+from fastapi_limiter.limiter import FastAPILimiter
 
 def tenant_rate_limiter(
     times: int,

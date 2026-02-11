@@ -4,7 +4,6 @@ import asyncio
 import json
 from uuid import uuid4
 from datetime import datetime
-
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 
@@ -19,6 +18,9 @@ from app.db.models.sdlc_job import SDLCJob
 
 from app.api.deps import get_current_user
 from app.db.models.sdlc_step import ApprovalStatus
+from uuid import uuid4
+from app.dtos.workflow_dto import StartWorkflowRequestDTO
+from app.dtos.response_dto import WorkflowResponseDTO
 import json
 import re
 
@@ -30,27 +32,29 @@ router = APIRouter(prefix="/workflows", tags=["workflows"])
 # ------------------------------------------------------------------
 
 
-@router.post("/start")
-def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
-    product_idea = payload.get("product_idea")
-    job_id = payload.get("job_id")
+@router.post("/start", response_model=WorkflowResponseDTO)
+def start_or_resume(
+    payload: StartWorkflowRequestDTO,
+    user: dict = Depends(get_current_user)
+):
 
-    if job_id:
-        if JobStore(job_id).load_status() is None:
+    if payload.job_id:
+        if JobStore(str(payload.job_id)).load_status() is None:
             raise HTTPException(404, "Job not found")
 
         celery_app.send_task(
             "app.workers.tasks.run_sdlc_job",
-            args=[job_id],
+            args=[str(payload.job_id)],
             kwargs={"tenant_id": user.tenant_id},
         )
-        return {"job_id": job_id, "message": "Workflow resumed"}
 
-    if not product_idea:
+        return JobStore(str(payload.job_id)).load_status()
+
+    if not payload.product_idea:
         raise HTTPException(400, "product_idea is required")
 
     job_id = str(uuid4())
-    state = SDLCState(job_id, product_idea)
+    state = SDLCState(job_id, payload.product_idea)
     JobStore(job_id).save_status(state.to_dict())
 
     celery_app.send_task(
@@ -59,7 +63,7 @@ def start_or_resume(payload: dict, user: dict = Depends(get_current_user)):
         kwargs={"tenant_id": user.tenant_id},
     )
 
-    return {"job_id": job_id, "message": "Workflow started"}
+    return JobStore(job_id).load_status()
 
 
 # ------------------------------------------------------------------

@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from app.api.v1.router import api_router
 from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
 from redis.asyncio import Redis
 from app.api.v1 import projects
 

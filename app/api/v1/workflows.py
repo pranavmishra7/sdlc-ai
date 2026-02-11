@@ -38,24 +38,30 @@ def start_or_resume(
     payload: StartWorkflowRequestDTO,
     user: dict = Depends(get_current_user)
 ):
+    job_id = None
+    state = None
 
+    # Case 1: Try resume
     if payload.job_id:
         existing = JobStore(str(payload.job_id)).load_status()
-        if existing :
+
+        if existing:
+            # Resume existing job
             celery_app.send_task(
                 "app.workers.tasks.run_sdlc_job",
                 args=[str(payload.job_id)],
                 kwargs={"tenant_id": user.tenant_id},
             )
+            return existing
 
-        return existing
+        # If existing is None → we fall through and create new
 
+    # Case 2: Start new job
     if not payload.product_idea:
         raise HTTPException(status_code=400, detail="product_idea is required")
 
     job_id = str(uuid4())
 
-    # You can now pass entire DTO into state if needed
     state = SDLCState(
         job_id=job_id,
         product_idea=payload.product_idea
@@ -70,6 +76,7 @@ def start_or_resume(
     )
 
     return JobStore(job_id).load_status()
+
 
 
 # ------------------------------------------------------------------

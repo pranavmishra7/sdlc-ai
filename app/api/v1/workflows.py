@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from uuid import uuid4
+from uuid import UUID, uuid4
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
@@ -21,6 +21,7 @@ from app.db.models.sdlc_step import ApprovalStatus
 from uuid import uuid4
 from app.dtos.workflow_dto import StartWorkflowRequestDTO
 from app.dtos.response_dto import WorkflowResponseDTO
+from app.dtos.status_dto import WorkflowStatusResponseDTO
 import json
 import re
 
@@ -39,8 +40,9 @@ def start_or_resume(
 ):
 
     if payload.job_id:
-        if JobStore(str(payload.job_id)).load_status() is None:
-            raise HTTPException(404, "Job not found")
+        existing = JobStore(str(payload.job_id)).load_status()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Job not found")
 
         celery_app.send_task(
             "app.workers.tasks.run_sdlc_job",
@@ -48,13 +50,19 @@ def start_or_resume(
             kwargs={"tenant_id": user.tenant_id},
         )
 
-        return JobStore(str(payload.job_id)).load_status()
+        return existing
 
     if not payload.product_idea:
-        raise HTTPException(400, "product_idea is required")
+        raise HTTPException(status_code=400, detail="product_idea is required")
 
     job_id = str(uuid4())
-    state = SDLCState(job_id, payload.product_idea)
+
+    # You can now pass entire DTO into state if needed
+    state = SDLCState(
+        job_id=job_id,
+        product_idea=payload.product_idea
+    )
+
     JobStore(job_id).save_status(state.to_dict())
 
     celery_app.send_task(
@@ -123,13 +131,14 @@ def reject_step(job_id: str, step: str, user: dict = Depends(get_current_user)):
 # ------------------------------------------------------------------
 
 
-@router.get("/{job_id}/status")
-def get_job_status(job_id: str):
-    store = JobStore(job_id)
+@router.get("/{job_id}/status", response_model=WorkflowStatusResponseDTO)
+def get_job_status(job_id: UUID):
+    store = JobStore(str(job_id))
     status = store.load_status()
 
     if status is None:
-        raise HTTPException(404, "Job not found")
+        raise HTTPException(status_code=404, detail="Job not found")
+
     return status
 
 

@@ -63,9 +63,4 @@ sudo apt install -y \
   uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   start api test payload
-  {
-  "product_idea": "create documentation for financial investment solutions",
-  "domain": "financial investments",
-  "audience": "retail investors",
-  "output_format": "technical documentation"
-}
+ {"product_idea":"Create structured, client-facing documentation for a financial investment solutions application.\n      ","domain":"Financial Services – Investment Products and Portfolio Management","target_audience":{"primary":["Retail investors","Relationship managers","Financial planners","      "],"secondary":["Compliance teams","Operations teams","Financial advisors","      "]},"documentation_objective":" Provide clear, accurate, regulator-safe documentation without offering financial advice.\n      ","regulatory_context":["No financial advice","No performance guarantees","Regulated financial environment","Data privacy compliance","      "]}

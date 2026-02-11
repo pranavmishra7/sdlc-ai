@@ -41,14 +41,12 @@ def start_or_resume(
 
     if payload.job_id:
         existing = JobStore(str(payload.job_id)).load_status()
-        if existing is None:
-            raise HTTPException(status_code=404, detail="Job not found")
-
-        celery_app.send_task(
-            "app.workers.tasks.run_sdlc_job",
-            args=[str(payload.job_id)],
-            kwargs={"tenant_id": user.tenant_id},
-        )
+        if existing :
+            celery_app.send_task(
+                "app.workers.tasks.run_sdlc_job",
+                args=[str(payload.job_id)],
+                kwargs={"tenant_id": user.tenant_id},
+            )
 
         return existing
 

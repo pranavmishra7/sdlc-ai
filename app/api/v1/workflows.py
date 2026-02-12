@@ -85,8 +85,8 @@ def start_or_resume(
 
 
 @router.post("/steps/{job_id}/{step}/approve")
-def approve_step(job_id: str, step: str, user: dict = Depends(get_current_user)):
-    store = JobStore(job_id)
+def approve_step(job_id: UUID, step: str, user: dict = Depends(get_current_user)):
+    store = JobStore(str(job_id))
     data = store.load_status()
     if not data:
         raise HTTPException(404, "Job not found")
@@ -113,8 +113,8 @@ def approve_step(job_id: str, step: str, user: dict = Depends(get_current_user))
 
 
 @router.post("/steps/{job_id}/{step}/reject")
-def reject_step(job_id: str, step: str, user: dict = Depends(get_current_user)):
-    store = JobStore(job_id)
+def reject_step(job_id: UUID, step: str, user: dict = Depends(get_current_user)):
+    store = JobStore(str(job_id))
     data = store.load_status()
     if not data:
         raise HTTPException(404, "Job not found")
@@ -148,8 +148,8 @@ def get_job_status(job_id: UUID):
 
 
 @router.get("/{job_id}/steps/{step}")
-def get_step(job_id: str, step: str):
-    store = JobStore(job_id)
+def get_step(job_id: UUID, step: str):
+    store = JobStore(str(job_id))
     status = store.load_status()
 
     if status is None:
@@ -179,8 +179,8 @@ def list_dead_letter_jobs():
 
 
 @router.get("/admin/jobs/{job_id}")
-def inspect_job(job_id: str):
-    store = JobStore(job_id)
+def inspect_job(job_id: UUID):
+    store = JobStore(str(job_id))
     status = store.load_status()
     if status is None:
         raise HTTPException(404, "Job not found")
@@ -188,8 +188,8 @@ def inspect_job(job_id: str):
 
 
 @router.post("/admin/jobs/{job_id}/reset")
-def reset_dead_letter_job(job_id: str, user: dict = Depends(get_current_user)):
-    store = JobStore(job_id)
+def reset_dead_letter_job(job_id: UUID, user: dict = Depends(get_current_user)):
+    store = JobStore(str(job_id))
     status = store.load_status()
     if status is None:
         raise HTTPException(404, "Job not found")
@@ -211,14 +211,14 @@ def reset_dead_letter_job(job_id: str, user: dict = Depends(get_current_user)):
 
     asyncio.create_task(
         sse_manager.publish(
-            job_id,
+            str(job_id),
             {"event": "job_reset", "step": failed_step},
         )
     )
 
     celery_app.send_task(
         "app.workers.tasks.run_sdlc_job",
-        args=[job_id],
+        args=[str(job_id)],
         kwargs={"tenant_id": user.tenant_id},
     )
 
@@ -226,11 +226,11 @@ def reset_dead_letter_job(job_id: str, user: dict = Depends(get_current_user)):
 
 
 @router.get("/events/{job_id}")
-async def stream_events(job_id: str, request: Request):
-    if JobStore(job_id).load_status() is None:
+async def stream_events(job_id: UUID, request: Request):
+    if JobStore(str(job_id)).load_status() is None:
         raise HTTPException(404, "Job not found")
 
-    queue = sse_manager.register(job_id)
+    queue = sse_manager.register(str(job_id))
 
     async def generator():
         try:
@@ -240,7 +240,7 @@ async def stream_events(job_id: str, request: Request):
                 event = await queue.get()
                 yield f"data: {json.dumps(event)}\n\n"
         finally:
-            sse_manager.unregister(job_id, queue)
+            sse_manager.unregister(str(job_id), queue)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
 
